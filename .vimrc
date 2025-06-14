@@ -73,6 +73,8 @@ nnoremap <C-H> <C-W><C-H>
  set fileformat=unix
  set colorcolumn=80
  highlight ColorColumn ctermbg=235
+ " Highlight cursorline
+ set cursorline
 
 " let g:ale linters = { 'python': ['flake8']}
 
@@ -87,6 +89,6 @@ set number
 vnoremap < <gv
 vnoremap > >gv
 
-"Easier formatting of text
+" Easier formatting of text
 vmap Q gq
 vmap Q gqap
