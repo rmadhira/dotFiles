@@ -1,3 +1,11 @@
+" Include the system settings
+":if filereadbale( "/etc/vimrc" )
+"    source /etc/vimrc
+":endif
+
+" Include any other specific settings
+
+" Set  your own customizations below
 set nocompatible              " be iMproved, required                              
 filetype off                  " required                                           
                                                                                    
