@@ -8,17 +8,21 @@ DOTFILES_REPO="https://github.com/rmadhira/dotFiles.git"
 VIM_COLOR_REPO="https://github.com/gosukiwi/vim-atom-dark.git"
 COLOR_FILE="atom-dark-256.vim"
 
-log() {
-    echo "- $1" | tee -a "$LOG_FILE"
+log()    { echo "- $1" | tee -a "$LOG_FILE"; }
+error()  { echo "❌ $1" | tee -a "$LOG_FILE"; exit 1; }
+header() { echo -e "\n## $1" | tee -a "$LOG_FILE"; }
+
+backup() {
+    [[ -e ~/$1 ]] && {
+        cp -a ~/$1 ~/${1}.bak || error "Failed to backup ~$1"
+        log "Backed up ~$1 to ~/${1}.bak"
+    }
 }
 
-error_exit() {
-    echo "❌ $1" | tee -a "$LOG_FILE"
-    exit 1
+detect_os() {
 }
 
-header() {
-    echo -e "\n## $1" | tee -a "$LOG_FILE"
+install_pkgs() {
 }
 
 # Start log
