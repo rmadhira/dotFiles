@@ -100,3 +100,9 @@ vnoremap > >gv
 " Easier formatting of text
 vmap Q gq
 vmap Q gqap
+
+" anytime you want to insert a Markdown-style header with the current date and
+" time, just press<leader>D (the default leader key in Vim is \). A new line
+" with the current date and time, formatted per the strftime format, will be
+" inserted below
+map <leader>D :put =strftime('# %a %Y-%m-%d %H:%M:%S%z')<CR>
