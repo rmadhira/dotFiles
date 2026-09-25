@@ -24,12 +24,15 @@ Until the phase that replaces them, the old files stay as they are: `worksetup.s
 
 ## Checking scripts
 
-There is no build or test suite. Before committing a script:
+There is no build step. Before committing a script:
 
 ```sh
+/bin/bash tests/run.sh         # install.sh against throwaway fake home folders
 /bin/bash -n <script>          # syntax, with macOS's bash 3.2
 /bin/bash <script>             # run with bash 3.2, not a newer Homebrew bash
-shellcheck <script>            # if installed
+shellcheck <script>            # if installed (a personal package from phase 4)
 ```
+
+`tests/run.sh` must pass before every commit that touches `install.sh` or `lib/`. It sets `HOME` to a temporary folder, so never run `install.sh` against the real home folder to test a change.
 
 `tools/survey.sh` is a read-only machine survey. It redacts the home path and hostname, and shows SSH keys only as counts, because key file names can contain personal words. Its output still describes a real machine, so it belongs in chat, never in a committed file.

@@ -129,6 +129,7 @@ dotFiles/
   task/taskrc                # included from the local ~/.taskrc
   hooks/pre-commit           # PII guard
   tools/survey.sh            # standalone read-only machine survey (phase 0; replaced by --report)
+  tests/run.sh               # checks install.sh against throwaway fake home folders
   docs/
   CLAUDE.md  README.md
 ```
@@ -490,7 +491,7 @@ The Linux servers have no Claude access, so the installer must explain itself we
 **Normal output**
 
 - Numbered step headers: `[4/9] Installing add-ons`.
-- One line per action with a fixed result word: `ok` (already right), `done` (changed), `skip` (not for this platform or profile), `FAIL`.
+- One line per action with a fixed result word: `ok` (already right), `done` (changed), `skip` (not for this platform or profile), `FAIL`. The read-only modes use three more: `todo` (a real run would change this), `ask` (a real run would ask first) and `warn` (needs attention, and is left alone).
 - Every external command is printed before it runs, prefixed with `+` (`+ sudo apt install -y fzf`), and its output is shown and logged.
 - The first lines show what the run detected: platform, OS release, architecture, bash version, profile, repo commit, and whether the repo has uncommitted changes.
 
@@ -518,7 +519,7 @@ This uses bash's `ERR` trap with `set -eE`, `$BASH_COMMAND`, `BASH_SOURCE` and `
 
 **`--verbose`** adds a line-by-line trace (`set -x`, with `PS4` showing file and line) to the log file only, so the terminal stays readable.
 
-**`--report`** is read-only. It prints one pasteable block: the detection lines above, `--check` results, versions of every managed tool, the add-on states, and the failure block from the latest log, if there is one.
+**`--report`** is read-only. It prints one pasteable block: the detection lines above, `--check` results (packages, add-ons, files, plugins), versions of git, vim, tmux and bash, and the failure block from the latest log, if there is one. It asks only tools that write nothing for their version: glow, for one, creates config files in the home folder on any run, which a test caught.
 
 **Redaction.** The failure block, `--report` and the log replace `$HOME` with `~`, the username with `<user>`, and the hostname with `<host>`. Reports can be pasted anywhere without editing, and nothing personal can end up in a fix by copy and paste. SSH key file names can contain personal words (the first phase 0 survey showed one that does), so `--report` shows only whether each key from the identities list exists, never a raw listing of `~/.ssh`. The survey was changed the same way: it prints only key counts.
 
@@ -600,7 +601,7 @@ Work happens on a branch, `redesign`, which is pushed but only merged into `mast
 | --- | --- | --- | --- | --- | --- |
 | 0 | Branch; commit this design, `CLAUDE.md` and `tools/survey.sh`. Then run the survey on every machine (server B first, then the office Mac, server A, the personal Mac) and add the findings to Current state | all four (read-only) | No: only the repo is cloned | Branch pushed; a survey from each machine is reviewed here | Delete branch |
 | 1 | Public repo content: new layout, merge in the live `.tmux.conf`, write `shell/*` (including `load.sh`) from the shared part of `.zshrc`, `silent! colorscheme` in `vim/vimrc`, package lists, `links.txt`, `addons.txt`, pre-commit hook | none | No | `bash -n` passes on all scripts; hook blocks a planted test path; old root files still present | `git revert` |
-| 2 | Installer, read-only: wrapper, platform detection, both platform files, list parsing, preflight, `--check`, `--dry-run`, `--report`, output format, failure block, redaction. Then run the read-only modes everywhere | all four | No: only the repo is cloned | `shellcheck` clean; Macs run it with `/bin/bash`. Personal Mac: `--check` matches Current state. Server A: `--report` pasted here and reviewed. Fresh machines: `--check` shows everything missing, and `--dry-run` lists a complete install | `git revert` |
+| 2 | Installer, read-only: wrapper, platform detection, both platform files, list parsing, preflight, `--check`, `--dry-run`, `--report`, output format, failure block, redaction. `tests/run.sh` builds fake home folders in every state and checks the results. Then run the read-only modes everywhere | all four | No: the write path does not exist yet; only the repo is cloned | `tests/run.sh` passes under `/bin/bash` 3.2. Personal Mac: `--check` matches Current state, and no managed file'''s timestamp changes. Server A: `--report` pasted here and reviewed. Fresh machines: `--check` shows everything missing, and `--dry-run` lists a complete install. Before phase 3, shellcheck runs once through Docker on server B; from phase 4 it is a personal package | `git revert` |
 | 3 | Installer, write path: packages, add-ons, links, stubs, plugins, late links, backups, `--restore`, `--adopt`, keep-repo/take-live prompt. Real runs on the fresh machines only: office Mac `--profile office`, server B `--profile base`. Existing machines: `--dry-run` again with the finished code | office Mac, server B (real); personal Mac, server A (dry run) | fresh machines only | Both full runs succeed; an immediate re-run reports only `ok`; `--restore` then a re-run gives the same result; an `--adopt` + `--restore` round-trip leaves a test file byte-identical; a deliberately broken package name produces a usable failure block | `--restore`; worst case, reinstall a fresh machine |
 | 4 | Link the personal Mac, one `--only` at a time: packages, vim, tmux, git, task, then shell | personal Mac | Yes | Only the missing packages are installed (wget, fzf, ripgrep, jq, htop, bat); vim, tmux and a new terminal work after each step; after the git step, a test commit in each identity folder shows the right author | `--restore`, rollback levels, `brew uninstall` the new packages |
 | 5 | Private layer and identities: create `dotFiles-private` (private) and fill it from the personal Mac; add the private-layer clone and identity block to the installer; switch the personal Mac to the noreply email. Then move server B to `--profile personal`, with its own keys | personal Mac, server B | Yes | A new shell loads the private aliases on both; commits in both dotfiles repos and each identity folder show the right noreply author; the office Mac's `--dry-run` shows no private-layer steps | Delete the private repo and `--restore`; the public setup still works without it |
