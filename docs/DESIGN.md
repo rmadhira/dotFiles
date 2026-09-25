@@ -580,11 +580,11 @@ Repo files refer to home as `$HOME` or `~`, never `/Users/<name>` or `/home/<nam
 - `/Users/<anything>` or `/home/<anything>` literal paths
 - email addresses (except `noreply` addresses)
 - private IPv4 ranges: `10.`, `172.16–31.`, `192.168.`
-- markers of tool-generated blocks: `conda initialize`, `NVM_DIR`, `.cargo/env` with a literal path
-- likely secrets: `token`, `secret`, `password`, `api_key` followed by `=`
+- markers of tool-generated blocks: the opening line of the block `conda init` writes, and nvm's export of `NVM_DIR` (the exact patterns are in the hook, which skips itself)
+- likely secrets: a name like `token`, `secret`, `password` or `api_key`, then `=` or `:`, then a literal value of 6 or more characters. `$VAR`, `$(command)` and backquoted text do not count, so labels and prose about secrets pass.
 - my own words from `private/pii-patterns` (hostnames, account names), if the private layer is present
 
-A deliberate false positive can be committed with `git commit --no-verify`.
+The hook skips its own file, whose rules would match themselves. A deliberate false positive can be committed with `git commit --no-verify`.
 
 **Layer 3: review before push.** Each phase ends with reading the diff against the remote branch (`git diff origin/<branch>`) before `git push`.
 

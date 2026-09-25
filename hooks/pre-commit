@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+#
+# pre-commit - block commits that add personal data to this public repo.
+#
+# Checks only the lines a commit adds. Turned on per clone with
+#   git config core.hooksPath hooks
+# A deliberate false positive can be committed with: git commit --no-verify
+#
+# bash 3.2 compatible. See docs/DESIGN.md, Keeping PII out of the public repo.
+
+set -u
+
+PRIVATE_PATTERNS="$HOME/.config/dotfiles/private/pii-patterns"
+
+# name|extended regex. Matched case-sensitively unless the name ends in "/i".
+# "likely secret" wants a literal value of 6+ token characters after = or :,
+# so "password: $(cmd)" or prose about secrets does not trigger it.
+RULES='home path|/(Users|home)/[A-Za-z0-9._-]+
+email address|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}
+private IP|(^|[^0-9.])(10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|192\.168\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3})([^0-9]|$)
+conda block|>>> conda initialize >>>
+nvm block|export NVM_DIR=
+likely secret/i|(token|secret|password|passwd|api_?key)[A-Za-z0-9_]*[[:space:]]*[:=][[:space:]]*[^A-Za-z0-9[:space:]$`({]?[A-Za-z0-9/+_.-]{6,}'
+
+# Addresses that are public by design and allowed anywhere.
+ALLOWED_EMAILS='users\.noreply\.github\.com|git@github\.com|noreply@anthropic\.com'
+
+tmp_hits="$(mktemp)"
+trap 'rm -f "$tmp_hits"' EXIT
+
+# Added lines as "file<TAB>line number<TAB>text".
+added_lines() {
+    git diff --cached --no-color --no-ext-diff -U0 --diff-filter=ACMR |
+    awk '
+        /^\+\+\+ /  { file = substr($0, 7); next }
+        /^@@ /      { split($3, a, ","); line = substr(a[1], 2) + 0; next }
+        /^\+/       { printf "%s\t%d\t%s\n", file, line, substr($0, 2); line++ }
+    '
+}
+
+# Print one match as "  file:line  [rule]  text".
+report() {
+    printf '%s\n' "$2" | awk -F'\t' -v rule="$1" '{ printf "  %s:%s  [%s]  %s\n", $1, $2, rule, $3 }'
+}
+
+TAB="$(printf '\t')"
+lines="$(added_lines | grep -v "^hooks/pre-commit$TAB")"    # its own rules would match
+[ -z "$lines" ] && exit 0
+
+# One grep per rule over all added lines, not one per line.
+while IFS='|' read -r name regex; do
+    [ -z "$name" ] && continue
+    flags="-E"
+    case "$name" in */i) flags="-Ei"; name="${name%/i}" ;; esac
+    printf '%s\n' "$lines" | grep $flags -- "$regex" | while IFS= read -r hit; do
+        if [ "$name" = "email address" ]; then
+            # Allowed only if every address on the line is on the allow list.
+            rest="$(printf '%s\n' "$hit" | grep -Eo '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' |
+                    grep -Ev "$ALLOWED_EMAILS")"
+            [ -z "$rest" ] && continue
+        fi
+        report "$name" "$hit"
+    done
+done > "$tmp_hits" <<EOF
+$RULES
+EOF
+
+if [ -r "$PRIVATE_PATTERNS" ]; then
+    printf '%s\n' "$lines" |
+    grep -Fi -f <(grep -Ev '^[[:space:]]*(#|$)' "$PRIVATE_PATTERNS") |
+    while IFS= read -r hit; do report "private pattern" "$hit"; done >> "$tmp_hits"
+fi
+
+if [ -s "$tmp_hits" ]; then
+    {
+        echo "pre-commit: possible personal data in staged changes. Commit blocked."
+        cat "$tmp_hits"
+        echo "Move personal data to the private layer or a local file,"
+        echo "or commit with --no-verify if this is a false positive."
+    } >&2
+    exit 1
+fi
+exit 0
