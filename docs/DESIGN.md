@@ -389,7 +389,7 @@ Homebrew on macOS and apt on Ubuntu/Debian, driven by plain-text package lists t
 4. **Add-ons:** git clones from `addons.txt` (Vundle, TPM).
 5. **Links and stubs:** `link` and `stub` lines from `links.txt`.
 6. **Plugins:** `vim +PluginInstall +qall` and TPM's `bin/install_plugins`, so no manual `prefix + I` is needed. This needs step 5, because both tools read their config file to know what to install.
-7. **Late links:** `link:late` lines, which point into folders the plugins just created.
+7. **Late links:** `link:late` lines, which point into folders the plugins just created. A late link never creates folders: if the plugin's folder is missing, because the plugin failed to install, it warns and skips, since creating the folder would make the plugin manager think the plugin is installed.
 8. **Private layer and git identities** (personal profile only): clone or check the private layer, then write the identity block from its list.
 9. **Finish:** turn on the repo's pre-commit hook, then print the summary.
 
