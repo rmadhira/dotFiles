@@ -73,8 +73,11 @@ survey_common() {
     echo "global user.email set : $(yesno git config --global user.email)"
     echo "global user.name set  : $(yesno git config --global user.name)"
     echo "includeIf entries     : $(git config --global --get-regexp '^includeif\.' 2>/dev/null | wc -l | tr -d ' ')"
+    # Key file names can contain personal words, so only counts are shown.
     if [ -d "$HOME/.ssh" ]; then
-        echo "ssh public keys       : $(cd "$HOME/.ssh" && ls *.pub 2>/dev/null | tr '\n' ' ')"
+        all="$(cd "$HOME/.ssh" && ls *.pub 2>/dev/null | wc -l | tr -d ' ')"
+        conv="$(cd "$HOME/.ssh" && ls *_key.pub 2>/dev/null | wc -l | tr -d ' ')"
+        echo "ssh public keys       : $all ($conv named <account>_key; names not shown)"
     else
         echo "ssh public keys       : no ~/.ssh folder"
     fi

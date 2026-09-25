@@ -518,7 +518,7 @@ This uses bash's `ERR` trap with `set -eE`, `$BASH_COMMAND`, `BASH_SOURCE` and `
 
 **`--report`** is read-only. It prints one pasteable block: the detection lines above, `--check` results, versions of every managed tool, the add-on states, and the failure block from the latest log, if there is one.
 
-**Redaction.** The failure block, `--report` and the log replace `$HOME` with `~`, the username with `<user>`, and the hostname with `<host>`. Reports can be pasted anywhere without editing, and nothing personal can end up in a fix by copy and paste. SSH key file names can contain personal words (the phase 0 survey showed one that does), so `--report` shows only whether each key from the identities list exists, never a raw listing of `~/.ssh`.
+**Redaction.** The failure block, `--report` and the log replace `$HOME` with `~`, the username with `<user>`, and the hostname with `<host>`. Reports can be pasted anywhere without editing, and nothing personal can end up in a fix by copy and paste. SSH key file names can contain personal words (the first phase 0 survey showed one that does), so `--report` shows only whether each key from the identities list exists, never a raw listing of `~/.ssh`. The survey was changed the same way: it prints only key counts.
 
 **Exit codes:** 0 success, 1 a step failed, 2 wrong usage, 3 unsupported platform. Logs are kept, and the last 20 remain in `~/.local/state/dotfiles/`.
 
@@ -610,7 +610,7 @@ Work happens on a branch, `redesign`, which is pushed but only merged into `mast
 - One phase per session. Each ends with `--check`, a review of `git diff`, and a commit.
 - For every shell step on a machine in use (phases 4 and 6), keep a second terminal or SSH session open that was started **before** the change. If the new shell breaks, fix it from there.
 - A phase that fails stops the plan. Roll back, update this doc, then retry.
-- **Office Mac:** check the employer's policy before phase 3. Homebrew needs admin rights to create `/opt/homebrew`, and device management may block it or require approval. If Homebrew is not allowed, the office Mac uses `--link-only`, and the fresh-macOS test moves to the next new personal Mac.
+- **Office Mac:** Homebrew and basic CLI tools are assumed allowed (see Decided). Homebrew needs admin rights to create `/opt/homebrew`, and device management may block it or require approval. If Homebrew is not allowed, the office Mac uses `--link-only`, and the fresh-macOS test moves to the next new personal Mac.
 - A new personal laptop, whenever there is one, follows server B's path: `--profile base` in phase 3 style, then `--profile personal` once the private layer exists.
 - `CLAUDE.md` is updated in the same commit whenever a phase changes how the repo is used.
 
@@ -685,7 +685,8 @@ The decisions below are settled. The open questions need an answer before the ph
 | Installer | hand-written bash, zero dependencies; no chezmoi, stow or yadm | nothing to install first, fully understood, enjoyable to maintain |
 | atom-dark colour scheme | from the Vundle plugin only; `.vimrc` uses `silent! colorscheme atom-dark-256` | the separate clone and copy only hid a first-run error (see Current state) |
 | Task data | not synced; each machine keeps its own, and Taskwarrior versions may differ | how I use it today |
-| taskwarrior-tui, taskopen, gh on Linux | skipped for now (apt `-` in `map.txt`) | taskwarrior-tui and taskopen are not in Ubuntu apt; gh is under review (apt: 2.4.0 on 22.04, too old; 2.46 on 26.04) |
+| taskwarrior-tui, taskopen, gh on Linux | skipped (apt `-` in `map.txt`) | taskwarrior-tui and taskopen are not in Ubuntu apt; gh from apt is 2.4.0 on 22.04, too old, and not needed on the servers for now |
+| Office Mac policy | basic open-source CLI tools and Homebrew assumed allowed; the `--link-only` fallback stays in the design | generic tools, installed under my own admin account |
 | Rollout order | public part first, proven by real runs on the fresh office Mac and server B; the personal Mac and server A stay read-only until then; server A last | bugs surface where nothing can break |
 | Install order | nine-step run order; config linked before plugin installs, files inside plugin folders linked after | plugins read their config to know what to install |
 | What the installer manages | declared in `links.txt` and `addons.txt`; `--adopt` adds files | adding a file or add-on is one line, not a code change |
@@ -693,5 +694,4 @@ The decisions below are settled. The open questions need an answer before the ph
 
 **Open**
 
-- [ ] Before phase 3: gh on Linux. Keep skipping it, install it from apt only where apt is recent enough (26.04), or add GitHub's own apt repo on all servers?
-- [ ] Before phase 3: confirm the employer allows Homebrew and open-source CLI tools on the office Mac. It is MDM-managed, so admin rights alone do not settle it. If not allowed, the office Mac uses `--link-only`, and the first real macOS run moves to the next new personal Mac.
+None right now. New questions are added here as they come up.

@@ -32,4 +32,4 @@ There is no build or test suite. Before committing a script:
 shellcheck <script>            # if installed
 ```
 
-`tools/survey.sh` is a read-only machine survey. It redacts the home path and hostname, but prints SSH key file names as they are, and those can contain personal words. Its output belongs in chat, never in a committed file.
+`tools/survey.sh` is a read-only machine survey. It redacts the home path and hostname, and shows SSH keys only as counts, because key file names can contain personal words. Its output still describes a real machine, so it belongs in chat, never in a committed file.
