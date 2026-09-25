@@ -1,0 +1,10 @@
+# Shared git settings, included from the local ~/.gitconfig.
+# Identities (names, emails, SSH keys) never go here; see docs/DESIGN.md, Git identities.
+
+[pull]
+	ff = only
+
+[user]
+	# Refuse to commit without a configured identity instead of guessing one
+	# from the hostname. Identity folders and office defaults provide it.
+	useConfigOnly = true

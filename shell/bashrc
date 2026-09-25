@@ -1,0 +1,11 @@
+# Shared bash config, sourced by the dotfiles stub at the top of ~/.bashrc.
+# Everything specific to one machine stays in ~/.bashrc and ~/.bash_aliases.
+
+# Non-interactive shells (scp, "ssh host command", scripts that source
+# ~/.bashrc) stop here, so shared config never prints into them.
+[[ $- == *i* ]] || return
+
+# Repo root: two levels up from this file, symlinks resolved.
+DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)}"
+
+[ -f "$DOTFILES_DIR/shell/load.sh" ] && . "$DOTFILES_DIR/shell/load.sh"

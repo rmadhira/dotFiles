@@ -1,0 +1,13 @@
+# Shared zsh login settings, sourced by the dotfiles stub at the top of ~/.zprofile.
+
+# Homebrew: /opt/homebrew on Apple silicon, /usr/local on Intel.
+for _brew in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    if [ -x "$_brew" ]; then
+        eval "$("$_brew" shellenv)"
+        break
+    fi
+done
+unset _brew
+
+# Tool inits run only where the tool is installed.
+command -v rbenv >/dev/null 2>&1 && eval "$(rbenv init -)"

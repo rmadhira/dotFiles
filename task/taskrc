@@ -1,0 +1,3 @@
+# Shared Taskwarrior settings, included from the local ~/.taskrc.
+# Only settings valid in both Taskwarrior 2.6 (Ubuntu) and 3.x (Homebrew) belong here.
+# data.location, contexts and private projects stay in the local ~/.taskrc.

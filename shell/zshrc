@@ -1,0 +1,7 @@
+# Shared zsh config, sourced by the dotfiles stub at the top of ~/.zshrc.
+# Everything specific to one machine stays in ~/.zshrc, below the stub.
+
+# Repo root: two levels up from this file, symlinks resolved.
+DOTFILES_DIR="${DOTFILES_DIR:-${${(%):-%x}:A:h:h}}"
+
+[ -f "$DOTFILES_DIR/shell/load.sh" ] && . "$DOTFILES_DIR/shell/load.sh"

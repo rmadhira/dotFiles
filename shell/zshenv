@@ -1,0 +1,4 @@
+# Shared zsh environment, sourced by the dotfiles stub at the top of ~/.zshenv.
+# zsh reads this for every shell, scripts included, so keep it small and silent.
+
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"

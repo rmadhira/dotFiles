@@ -1,0 +1,4 @@
+# Editor and OS clutter
+*.swp
+*.swo
+.DS_Store
