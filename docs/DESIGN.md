@@ -27,7 +27,7 @@ One command sets up a new macOS or Linux machine with my daily tools and config.
 
 ## Current state
 
-The repo and my personal Mac have drifted in both directions, and `worksetup.sh` does not run at all. This is from a read-only audit of the personal Mac (macOS 14.8.3, arm64) on 2026-09-25. The Linux machines have not been audited yet.
+The repo and my personal Mac have drifted in both directions, and `worksetup.sh` does not run at all. This is from a read-only audit of the personal Mac (macOS 14.8.3, arm64) on 2026-09-25. All four machines were then surveyed with `tools/survey.sh` on the same day; see The machines below.
 
 **Repo vs. this Mac, per file**
 
@@ -67,11 +67,21 @@ The repo and my personal Mac have drifted in both directions, and `worksetup.sh`
 | | Personal Mac | Office Mac | Server A | Server B |
 | --- | --- | --- | --- | --- |
 | State | in use, drifted (audited above) | fresh install | in use, drifted | fresh install |
-| OS | macOS 14.8.3, arm64 | macOS | Ubuntu 22.04.5 LTS (6.8 HWE kernel), x86_64 | Ubuntu 26.04 LTS (7.0 kernel), x86_64 |
+| OS | macOS 14.8.3, arm64 | macOS 26.4 | Ubuntu 22.04.5 LTS (6.8 HWE kernel), x86_64 | Ubuntu 26.04 LTS (7.0 kernel), x86_64 |
 | Shell | zsh; bash 3.2.57 for scripts | zsh; bash 3.2 for scripts | bash 5.1.16 | bash 5.3.9 |
 | Profile | personal | office | personal | personal (base until the private layer exists) |
-| conda | Anaconda, installed twice | none | Anaconda, active (`base` in the prompt) | none |
+| conda | Anaconda, installed twice | not reported | Miniconda (`~/miniconda3`), active (`base` in the prompt) | none |
+| sudo | admin user | admin user | asks for a password | asks for a password |
+| Managed (MDM) | no | yes: DEP, user approved | n/a | n/a |
+| Homebrew | 6.0.18, owned by me | 7.0.4, owned by me | n/a | n/a |
+| Surveyed | 2026-09-25 | 2026-09-25 (summary) | 2026-09-25 | 2026-09-25 |
 | Claude access | yes | no | no | no |
+
+**Server B survey (fresh 26.04).** git, vim, tmux, curl, wget, jq and htop come preinstalled, and so does Docker. `.bashrc` and `.profile` are the Ubuntu defaults. There is no `.gitconfig`, no SSH key, no vim or tmux setup, and no zsh. HTTPS to GitHub works. Every base tool has an apt package except taskopen and taskwarrior-tui. glow (2.1.1) is in Ubuntu's own apt, and Taskwarrior is still 2.6 (2.6.2).
+
+**Server A survey (in use, 22.04).** Everything from the old setup is present: Vundle with its five plugins, TPM, Dracula, glow (2.1.1, with the charm.sh apt repo already configured), Taskwarrior 2.6.1, Timewarrior 1.4.3, mosh and tree. taskopen is installed outside apt, and taskwarrior-tui through `cargo`. fzf, ripgrep, jq and bat are missing. `.vimrc` has the same line count as the repo's, so it is probably the old copy. `.tmux.conf` and `.taskrc` (46 lines, customised) have drifted. `.bash_aliases` has 63 lines. There are four crontab entries, none mentioning conda directly. Two `includeIf` identities are set up, but the SSH key file names do not follow the `<account>_key` convention. Docker is installed (snap). apt versions are older than on 26.04: gh 2.4.0, fzf 0.29, vim 8.2, tmux 3.2a.
+
+**Office Mac survey (fresh, company-managed).** macOS 26.4, enrolled in the employer's MDM (DEP, user approved). I am an admin, Homebrew 7.0.4 is installed and owned by me, and the standalone Command Line Tools provide git. iTerm2 is installed; whether by hand or through Homebrew was not recorded, and the design handles both. So the installer can run there technically. Whether the employer allows Homebrew and these tools is a policy question, not a technical one (see Open questions).
 
 The servers are headless and use bash as their login shell (`/bin/bash`). On server A, `vbrc` edits `~/.bash_aliases`, `sbrc` sources `~/.bashrc`, and `vtrc` edits `~/.taskrc`. On the personal Mac, `vbrc` edits `~/.zshrc`. Machines without Claude access report failures as pasted reports (see Verbose output and error reports). Server A's full `--check` audit happens in phase 2. Hostnames and usernames are not recorded here; they belong in the private layer (`pii-patterns`).
 
@@ -353,6 +363,7 @@ The pre-commit hook covers file contents, but it cannot see commit metadata. The
 - **Identity config** (folders, names, noreply emails) comes from `private/git-identities`, the same as on laptops.
 - **Each server gets its own key for each account**, generated on that server. The file name is the same everywhere (`~/.ssh/<account>_key`), so the identities list works unchanged, but the key inside differs per machine.
 - **Never copy a key between machines.** A key per machine can be revoked alone if that machine is lost or compromised. A shared key would force a rotation everywhere.
+- **Existing keys are renamed by hand to the convention.** Server A's keys use other file names. In phase 6, `--check` reports the mismatch and prints the `mv` commands, plus the edit needed in each identity file. The installer never moves keys itself. The same step compares key fingerprints (`ssh-keygen -lf`) with the other machines, to find any key that was copied rather than generated there.
 - **GitHub key titles name the machine and account,** for example `server-a / <account-b>`, so the list under Settings → SSH keys shows exactly what to revoke. Review that list when a machine is retired.
 - **Always with `IdentitiesOnly=yes`** (see above). On a server that uses both accounts, this is what keeps pushes on the right account.
 - **Optional hardening:** a passphrase on the key, unlocked once per login through `ssh-agent`. A cron job that only pulls one repo can use a separate read-only deploy key without a passphrase, so the main key never has to be unlocked unattended.
@@ -370,7 +381,7 @@ Homebrew on macOS and apt on Ubuntu/Debian, driven by plain-text package lists t
 **Run order.** A full run has nine numbered steps, the numbers the output shows (`[3/9]`). `--only` and `--link-only` run the relevant subset in the same order.
 
 1. **Preflight:** detect the platform, read the profile, check the repo. Nothing is changed.
-2. **Package manager:** `pkg_bootstrap`. On macOS: Homebrew through its official installer if missing, then its `shellenv` is loaded for the rest of the run. On Linux: `sudo apt update`, and the charm.sh repo only if glow is missing.
+2. **Package manager:** `pkg_bootstrap`. On macOS: Homebrew through its official installer if missing, then its `shellenv` is loaded for the rest of the run. On Linux: `sudo -v` first, so the password is asked once, up front, with a line saying why. Then `sudo apt update`, and the charm.sh repo only if glow is missing **and** apt has no glow package (26.04 has one; 22.04 probably does not).
 3. **Packages:** `common.txt`, then the profile's list.
 4. **Add-ons:** git clones from `addons.txt` (Vundle, TPM).
 5. **Links and stubs:** `link` and `stub` lines from `links.txt`.
@@ -388,8 +399,8 @@ Homebrew on macOS and apt on Ubuntu/Debian, driven by plain-text package lists t
 | tmux | tmux | tmux | |
 | curl | (system) | curl | macOS ships curl |
 | wget | wget | wget | missing on this Mac today |
-| glow | glow | glow | apt needs the charm.sh repo |
-| taskwarrior | task | taskwarrior | versions may differ (Ubuntu 22.04: 2.6, Homebrew: 3.x); fine, because task data is not synced |
+| glow | glow | glow | in Ubuntu's apt from 26.04; older releases need the charm.sh repo |
+| taskwarrior | task | taskwarrior | versions may differ (Ubuntu 22.04 and 26.04: 2.6, Homebrew: 3.x); fine, because task data is not synced |
 | timewarrior | timewarrior | timewarrior | |
 | fzf | fzf | fzf | fuzzy file and history search |
 | ripgrep | ripgrep | ripgrep | command is `rg` |
@@ -399,7 +410,7 @@ Homebrew on macOS and apt on Ubuntu/Debian, driven by plain-text package lists t
 | htop | htop | htop | |
 | bat | bat | bat | apt installs the command as `batcat`; `aliases.sh` adds `bat` → `batcat` on Linux |
 | taskwarrior-tui | taskwarrior-tui | skipped | macOS only for now; not in Ubuntu apt |
-| taskopen | taskopen | unverified | apt availability checked on server B in phase 3 |
+| taskopen | taskopen | skipped | macOS only; not in apt on 22.04 or 26.04 (an existing manual install is left alone) |
 | mosh | mosh | mosh | |
 | iTerm2 | `cask:iterm2 iTerm.app` | skipped | macOS app only; a copy installed by hand counts as installed |
 | Vundle, TPM | git clone | git clone | not packages |
@@ -415,6 +426,7 @@ taskwarrior        task             taskwarrior
 curl               -                curl            # macOS ships curl
 gh                 gh               -               # macOS only for now
 taskwarrior-tui    taskwarrior-tui  -               # not in Ubuntu apt
+taskopen           taskopen         -               # not in Ubuntu apt (22.04, 26.04)
 ```
 
 Every list is parsed with plain `while read` loops, without associative arrays, so it works in bash 3.2.
@@ -436,7 +448,7 @@ Every list is parsed with plain `while read` loops, without associative arrays, 
 
 | Function | What it does | macOS | Debian/Ubuntu |
 | --- | --- | --- | --- |
-| `pkg_bootstrap` | Gets the package manager ready | Xcode CLT check; install Homebrew if missing; load `shellenv` | `sudo apt update`; add the charm.sh repo if glow is missing |
+| `pkg_bootstrap` | Gets the package manager ready | Xcode CLT check; install Homebrew if missing; load `shellenv` | `sudo -v` (one password prompt, up front); `sudo apt update`; add the charm.sh repo only if apt has no glow |
 | `pkg_installed <name>` | Is this package already installed? | `brew list --formula`; for casks, `brew list --cask` **or** the app bundle already in `/Applications` or `~/Applications` (reported as "ok, installed outside Homebrew" and never reinstalled) | `dpkg -s` |
 | `pkg_install <name>…` | Installs packages; `cask:` entries only on macOS | `brew install`, `brew install --cask` | `sudo apt install -y`; skips `cask:` entries |
 | `sed_inplace <expr> <file>` | Edits a file in place | `sed -i ''` | `sed -i` |
@@ -506,7 +518,7 @@ This uses bash's `ERR` trap with `set -eE`, `$BASH_COMMAND`, `BASH_SOURCE` and `
 
 **`--report`** is read-only. It prints one pasteable block: the detection lines above, `--check` results, versions of every managed tool, the add-on states, and the failure block from the latest log, if there is one.
 
-**Redaction.** The failure block, `--report` and the log replace `$HOME` with `~`, the username with `<user>`, and the hostname with `<host>`. Reports can be pasted anywhere without editing, and nothing personal can end up in a fix by copy and paste.
+**Redaction.** The failure block, `--report` and the log replace `$HOME` with `~`, the username with `<user>`, and the hostname with `<host>`. Reports can be pasted anywhere without editing, and nothing personal can end up in a fix by copy and paste. SSH key file names can contain personal words (the phase 0 survey showed one that does), so `--report` shows only whether each key from the identities list exists, never a raw listing of `~/.ssh`.
 
 **Exit codes:** 0 success, 1 a step failed, 2 wrong usage, 3 unsupported platform. Logs are kept, and the last 20 remain in `~/.local/state/dotfiles/`.
 
@@ -590,7 +602,7 @@ Work happens on a branch, `redesign`, which is pushed but only merged into `mast
 | 3 | Installer, write path: packages, add-ons, links, stubs, plugins, late links, backups, `--restore`, `--adopt`, keep-repo/take-live prompt. Real runs on the fresh machines only: office Mac `--profile office`, server B `--profile base`. Existing machines: `--dry-run` again with the finished code | office Mac, server B (real); personal Mac, server A (dry run) | fresh machines only | Both full runs succeed; an immediate re-run reports only `ok`; `--restore` then a re-run gives the same result; an `--adopt` + `--restore` round-trip leaves a test file byte-identical; a deliberately broken package name produces a usable failure block | `--restore`; worst case, reinstall a fresh machine |
 | 4 | Link the personal Mac, one `--only` at a time: packages, vim, tmux, git, task, then shell | personal Mac | Yes | Only the missing packages are installed (wget, fzf, ripgrep, jq, htop, bat); vim, tmux and a new terminal work after each step; after the git step, a test commit in each identity folder shows the right author | `--restore`, rollback levels, `brew uninstall` the new packages |
 | 5 | Private layer and identities: create `dotFiles-private` (private) and fill it from the personal Mac; add the private-layer clone and identity block to the installer; switch the personal Mac to the noreply email. Then move server B to `--profile personal`, with its own keys | personal Mac, server B | Yes | A new shell loads the private aliases on both; commits in both dotfiles repos and each identity folder show the right noreply author; the office Mac's `--dry-run` shows no private-layer steps | Delete the private repo and `--restore`; the public setup still works without it |
-| 6 | Server A: `--check`, bring drift worth keeping into the repo (take-live prompt or `--adopt`), then link one `--only` at a time, shell last. If Docker or Colima is available on the Mac, first run a full install in an `ubuntu:22.04` container | server A | Yes | `--check` clean; a new login shell works; the conda cron job's next scheduled run succeeds | `--restore` on server A |
+| 6 | Server A: `--check`, bring drift worth keeping into the repo (take-live prompt or `--adopt`), then link one `--only` at a time, shell last. First, a full install in an `ubuntu:22.04` container on server B, which has Docker, as a rehearsal | server A | Yes | `--check` clean; a new login shell works; the next scheduled run of each of its four cron jobs succeeds (the shared `bashrc` exits early for non-interactive shells, so cron behaviour should not change) | `--restore` on server A |
 | 7 | Clean up: remove `worksetup.sh` and the old root dotfiles, write `README.md`, merge to `master`. Then turn on GitHub email privacy and the push block, once every personal machine uses the noreply email | none | No | README steps work as written | `git revert` |
 
 **Rules during execution**
@@ -667,13 +679,13 @@ The decisions below are settled. The open questions need an answer before the ph
 | Repos | public `dotFiles` for any machine + private `dotFiles-private` layer at `~/.config/dotfiles/private/` on personal machines only | office laptops clone with no login and carry no personal data; personal data is still versioned |
 | Commit email | GitHub noreply for accounts with public repos; history left as is; push block turned on last | keeps my real email out of public commit metadata |
 | Servers and git identities | same identities as laptops; one key per server per account, generated on the server, never copied | I push and deploy from the servers; per-machine keys can be revoked one at a time |
-| conda | stays outside the repo, in local rc files; Anaconda kept on this Mac and server A; never installed on office machines (Miniforge through `cask:miniforge` in `office.txt` if conda is needed); migration to Miniforge deferred to a separate project | a migration touches no dotfiles and risks server A's cron job for no new capability; Anaconda's licence terms are a risk at larger employers |
+| conda | stays outside the repo, in local rc files; Anaconda kept on this Mac, Miniconda on server A; never installed on office machines (Miniforge through `cask:miniforge` in `office.txt` if conda is needed); migration to Miniforge deferred to a separate project | a migration touches no dotfiles and risks server A's cron job for no new capability; Anaconda's licence terms are a risk at larger employers |
 | Error reporting | numbered steps, echoed commands, one failure block, `--report`, redacted output | the servers have no Claude access |
 | Design doc location | `docs/DESIGN.md` in the repo, kept free of PII | one place for everything |
 | Installer | hand-written bash, zero dependencies; no chezmoi, stow or yadm | nothing to install first, fully understood, enjoyable to maintain |
 | atom-dark colour scheme | from the Vundle plugin only; `.vimrc` uses `silent! colorscheme atom-dark-256` | the separate clone and copy only hid a first-run error (see Current state) |
 | Task data | not synced; each machine keeps its own, and Taskwarrior versions may differ | how I use it today |
-| taskwarrior-tui, gh on Linux | skipped for now (apt `-` in `map.txt`) | neither is a plain `apt install` |
+| taskwarrior-tui, taskopen, gh on Linux | skipped for now (apt `-` in `map.txt`) | taskwarrior-tui and taskopen are not in Ubuntu apt; gh is under review (apt: 2.4.0 on 22.04, too old; 2.46 on 26.04) |
 | Rollout order | public part first, proven by real runs on the fresh office Mac and server B; the personal Mac and server A stay read-only until then; server A last | bugs surface where nothing can break |
 | Install order | nine-step run order; config linked before plugin installs, files inside plugin folders linked after | plugins read their config to know what to install |
 | What the installer manages | declared in `links.txt` and `addons.txt`; `--adopt` adds files | adding a file or add-on is one line, not a code change |
@@ -681,4 +693,5 @@ The decisions below are settled. The open questions need an answer before the ph
 
 **Open**
 
-- [ ] During phase 0: is `taskopen` available in apt on 22.04 and 26.04? The survey's apt section on each server answers this. If not, it gets `-` in `map.txt` like taskwarrior-tui.
+- [ ] Before phase 3: gh on Linux. Keep skipping it, install it from apt only where apt is recent enough (26.04), or add GitHub's own apt repo on all servers?
+- [ ] Before phase 3: confirm the employer allows Homebrew and open-source CLI tools on the office Mac. It is MDM-managed, so admin rights alone do not settle it. If not allowed, the office Mac uses `--link-only`, and the first real macOS run moves to the next new personal Mac.

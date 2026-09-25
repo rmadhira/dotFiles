@@ -16,6 +16,7 @@ Until the phase that replaces them, the old files stay as they are: `worksetup.s
 
 ## Hard constraints
 
+- **Never push without an explicit instruction.** No `git push`, remote branches, tags, PRs or other changes on GitHub unless the user asks for it in that message. Commit locally and say it is ready to push. If a requested push fails on credentials, stop and report it; never try other keys, tokens or credential helpers.
 - **Public repo, no PII.** No names, emails, home paths (`/Users/<name>`, `/home/<name>`), hostnames, private IPs or personal aliases in any committed file, including docs. Personal data belongs in the separate private repo (`dotFiles-private`, cloned to `~/.config/dotfiles/private/`). Work data belongs in neither repo.
 - **bash 3.2 compatible.** Scripts must run under macOS's `/bin/bash` 3.2: no associative arrays, `${var,,}`, `mapfile` or `readarray`. Commands whose flags differ between BSD and GNU (`sed -i`, `stat`, `readlink -f`) go through the platform functions in the design.
 - **Zero dependencies.** Plain bash and git only. The user chose this over chezmoi, stow and yadm; do not propose switching.
@@ -31,4 +32,4 @@ There is no build or test suite. Before committing a script:
 shellcheck <script>            # if installed
 ```
 
-`tools/survey.sh` is a read-only machine survey. Its output is safe to paste: the home path and hostname are redacted.
+`tools/survey.sh` is a read-only machine survey. It redacts the home path and hostname, but prints SSH key file names as they are, and those can contain personal words. Its output belongs in chat, never in a committed file.
