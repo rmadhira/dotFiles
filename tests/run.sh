@@ -139,6 +139,19 @@ run --dry-run --only packages --platform macos
 expect "macOS: cask install" "\+ brew install --cask iterm2|ok    iterm2"
 
 echo
+echo "a clone with the pre-commit hook off (like a fresh clone on another machine)"
+new_home
+CLONE="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-clone.XXXXXX")"
+cp -R "$REPO/." "$CLONE/"
+git -C "$CLONE" config --unset core.hooksPath 2>/dev/null || true
+for mode in --check --report --dry-run; do
+    OUT="$(HOME="$H" /bin/bash "$CLONE/install.sh" "$mode" --only vim 2>&1)"; RC=$?
+    expect_rc "$mode: exit 0 with the hook off" 0
+    expect "$mode: reports the hook as todo" "todo  pre-commit hook not turned on"
+done
+rm -rf "$CLONE"
+
+echo
 echo "report"
 new_home
 run --report --only vim;           expect_rc "report: exit 0" 0

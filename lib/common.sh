@@ -273,6 +273,7 @@ link_lines() {
         [ -z "${os:-}" ] || [ "$os" = "$PLATFORM_OS" ] || continue
         printf '%s %s %s\n' "$repo" "$live" "$mech"
     done
+    return 0
 }
 
 # ---------------------------------------------------------------- state of each kind of item
@@ -477,6 +478,7 @@ show_hook() {
         item todo "pre-commit hook not turned on for this clone"
         [ "$DRY_RUN" = 1 ] && cmd_line "git -C $(tildify "$DOTFILES_DIR") config core.hooksPath hooks"
     fi
+    return 0
 }
 
 # ---------------------------------------------------------------- modes
