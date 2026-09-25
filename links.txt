@@ -1,0 +1,13 @@
+# Managed files. See docs/DESIGN.md, Declared lists and --adopt.
+# mechanism: link | link:late (after plugin installs) | stub:sh | stub:gitconfig | stub:taskrc
+# optional last column: macos | linux
+# repo path            live path                                      mechanism       os
+vim/vimrc              ~/.vimrc                                       link
+tmux/tmux.conf         ~/.tmux.conf                                   link
+tmux/task_timew.sh     ~/.tmux/plugins/tmux/scripts/task_timew.sh     link:late
+shell/zshrc            ~/.zshrc                                       stub:sh         macos
+shell/zprofile         ~/.zprofile                                    stub:sh         macos
+shell/zshenv           ~/.zshenv                                      stub:sh         macos
+shell/bashrc           ~/.bashrc                                      stub:sh         linux
+git/gitconfig          ~/.gitconfig                                   stub:gitconfig
+task/taskrc            ~/.taskrc                                      stub:taskrc

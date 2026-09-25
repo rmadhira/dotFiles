@@ -1,0 +1,3 @@
+# Extra packages for the office profile (same format as common.txt). None yet.
+# If conda is needed on an office machine, use Miniforge, never Anaconda:
+# cask:miniforge

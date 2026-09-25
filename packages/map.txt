@@ -1,0 +1,8 @@
+# Package names that differ by platform. A list name not here is used as-is.
+# "-" skips the package on that platform.
+# list name        brew             apt
+taskwarrior        task             taskwarrior
+curl               -                curl            # macOS ships curl
+gh                 gh               -               # macOS only for now
+taskwarrior-tui    taskwarrior-tui  -               # not in Ubuntu apt
+taskopen           taskopen         -               # not in Ubuntu apt (22.04, 26.04)

@@ -1,0 +1,21 @@
+# Base tools for every machine. One per line; list names, translated by map.txt.
+# cask:<name> <App.app> = macOS app; the app bundle name lets an existing copy count as installed.
+git
+vim
+tmux
+curl
+wget
+glow
+taskwarrior
+timewarrior
+fzf
+ripgrep
+jq
+tree
+gh
+htop
+bat
+taskwarrior-tui
+taskopen
+mosh
+cask:iterm2 iTerm.app
