@@ -343,6 +343,8 @@ On personal machines, the git identity follows the folder. Each GitHub account g
 
 Also use `gitdir/i:` instead of `gitdir:`. The match then ignores letter case, which suits macOS's case-insensitive disk and is harmless on Linux.
 
+**Passphrases are typed, never stored.** My keys have passphrases, and I type them on each push or pull. They are not added to `ssh-agent` or the macOS Keychain, so no background process, and no agent or tool running as me, can use an unlocked key. The installer never runs `ssh-add`, never writes `UseKeychain` or `AddKeysToAgent` into `~/.ssh/config`, and never suggests them. Any git command that talks to GitHub over SSH needs me at the keyboard.
+
 **HTTPS remotes bypass all of this.** `core.sshCommand` only applies to SSH remotes. With an HTTPS remote, as this repo has today, the account comes from whatever login the credential helper has stored. `--check` lists repos inside identity folders that use HTTPS remotes. A fresh machine still clones this repo over HTTPS, since it is public and no key exists yet. On personal machines, `--check` then prints the command to switch the remote to SSH once the key is in place. Office machines keep HTTPS and never push.
 
 **Commit email: GitHub noreply, not my real address.** Every commit records an author email, and in a public repo anyone can read it (`git log`, or `.patch` on a commit URL). All existing commits in this repo carry my real address. From now on, identities for accounts with public repos use GitHub's noreply address, `<id>+<login>@users.noreply.github.com`. Look it up with `gh api user --jq '"\(.id)+\(.login)@users.noreply.github.com"'`.
@@ -366,7 +368,7 @@ The pre-commit hook covers file contents, but it cannot see commit metadata. The
 - **Existing keys are renamed by hand to the convention.** Server A's keys use other file names. In phase 6, `--check` reports the mismatch and prints the `mv` commands, plus the edit needed in each identity file. The installer never moves keys itself. The same step compares key fingerprints (`ssh-keygen -lf`) with the other machines, to find any key that was copied rather than generated there.
 - **GitHub key titles name the machine and account,** for example `server-a / <account-b>`, so the list under Settings → SSH keys shows exactly what to revoke. Review that list when a machine is retired.
 - **Always with `IdentitiesOnly=yes`** (see above). On a server that uses both accounts, this is what keeps pushes on the right account.
-- **Optional hardening:** a passphrase on the key, unlocked once per login through `ssh-agent`. A cron job that only pulls one repo can use a separate read-only deploy key without a passphrase, so the main key never has to be unlocked unattended.
+- **Passphrase on every key,** typed on use, as on the laptops (see above). A cron job that only pulls one repo can use a separate read-only deploy key without a passphrase, so the main key never has to be unlocked unattended.
 
 These keys give full access to everything that account can reach. Keeping the servers updated and SSH access locked down matters as much as the keys themselves. That is outside this design.
 
@@ -677,6 +679,7 @@ The decisions below are settled. The open questions need an answer before the ph
 | Linux shell | bash; `~/.bash_aliases` stays local; `shell/bashrc` returns early for non-interactive shells | what the servers use today |
 | Git identities | one per account folder under `~/projects/`, on personal machines only; the list with names and emails lives in the private layer; keys are made per machine | keeps accounts apart; personal keys stay off employer hardware |
 | Repos | public `dotFiles` for any machine + private `dotFiles-private` layer at `~/.config/dotfiles/private/` on personal machines only | office laptops clone with no login and carry no personal data; personal data is still versioned |
+| SSH passphrases | typed on every use; never stored in `ssh-agent` or the Keychain; the installer never suggests it | no agent or background tool can use an unlocked key |
 | Commit email | GitHub noreply for accounts with public repos; history left as is; push block turned on last | keeps my real email out of public commit metadata |
 | Servers and git identities | same identities as laptops; one key per server per account, generated on the server, never copied | I push and deploy from the servers; per-machine keys can be revoked one at a time |
 | conda | stays outside the repo, in local rc files; Anaconda kept on this Mac, Miniconda on server A; never installed on office machines (Miniforge through `cask:miniforge` in `office.txt` if conda is needed); migration to Miniforge deferred to a separate project | a migration touches no dotfiles and risks server A's cron job for no new capability; Anaconda's licence terms are a risk at larger employers |
