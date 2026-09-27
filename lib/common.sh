@@ -4,13 +4,19 @@
 # bash 3.2 compatible: no associative arrays, ${var,,}, mapfile or readarray.
 # Commands whose flags differ between BSD and GNU go through lib/platform/*.sh.
 #
-# Phase 2: only the read-only modes (--check, --dry-run, --report) exist.
+# Read-only modes: --check, --dry-run, --report. Everything that changes the
+# machine lives in lib/actions.sh.
 
 set -Eeu
 
 STEPS=9
 MODE=""
 DRY_RUN=0
+READ_ONLY=1
+ADOPT_PATH=""
+ADOPT_AS=""
+RESTORE_ID=""
+LINK_ONLY=0
 PROFILE=""
 PROFILE_NOTE=""
 ONLY=""
@@ -21,6 +27,12 @@ CURRENT_ACTION=""
 CONFIG_DIR="$HOME/.config/dotfiles"
 COMPONENTS="packages vim tmux shell git task private"
 N_OK=0; N_TODO=0; N_ASK=0; N_WARN=0; N_FAIL=0; N_SKIP=0
+
+# shellcheck source=lib/actions.sh
+. "$DOTFILES_DIR/lib/actions.sh"
+
+# run_confirmed <mode function>: ask once, then run it.
+run_confirmed() { confirm_run; "$@"; }
 
 # ---------------------------------------------------------------- output
 
@@ -71,16 +83,25 @@ $1
 
 usage() {
     cat <<'EOF'
-Usage: ./install.sh MODE [options]
+Usage: ./install.sh [mode] [options]
 
-Modes (phase 2: read-only only, nothing is changed):
-  --check        show how this machine differs from the repo
-  --dry-run      show every step and command a real run would take
-  --report       one redacted block to paste into a chat
+Read-only modes (change nothing):
+  --check                show how this machine differs from the repo
+  --dry-run              show every step and command a real run would take
+  --report               one redacted block to paste into a chat
+
+Modes that change the machine (everything replaced is backed up first):
+  (no mode)              full install
+  --link-only            links and stubs only, no packages or plugins
+  --adopt PATH [--as P]  move a file into the repo and link it
+  --update-addons        git pull the add-ons
+  --restore [RUN]        undo a run (the latest by default)
+  --uninstall-hooks      turn off this clone's pre-commit hook
 
 Options:
-  --profile base|personal|office   default: saved profile, else base
+  --profile base|personal|office   default: saved profile; a real run asks
   --only packages|vim|tmux|shell|git|task|private
+  --yes                  no questions: confirm, and keep the repo version
   --platform macos|debian          override detection (for testing)
   --verbose                        write a line-by-line trace to a temp file
   -h, --help
@@ -95,10 +116,6 @@ die_usage() {
     exit 2
 }
 
-not_built_yet() {
-    echo "install.sh: $1 is part of the write path, which is built in phase 3." >&2
-    exit 2
-}
 
 # ---------------------------------------------------------------- failure report
 
@@ -119,7 +136,8 @@ on_error() {
     if [ -s "$ERR_FILE" ]; then
         IFS="$(printf '\t')" read -r rc cmd src line fn CURRENT_STEP CURRENT_ACTION < "$ERR_FILE" || true
     fi
-    rm -f "$ERR_FILE"
+    # A command run through run_cmd leaves its own text and last output behind.
+    [ -s "$ERR_FILE.cmd" ] && cmd="$(cat "$ERR_FILE.cmd")"
     {
         echo
         echo "==================== dotfiles: FAILED ===================="
@@ -130,9 +148,18 @@ on_error() {
         echo "location  : $src:$line ($fn)"
         echo "platform  : $(platform_line 2>/dev/null || echo unknown)"
         echo "repo      : $(repo_line 2>/dev/null || echo unknown) | profile: ${PROFILE:-?}"
+        if [ -s "$ERR_FILE.out" ]; then
+            echo "last output:"
+            sed 's/^/  /' "$ERR_FILE.out"
+        fi
+        [ -n "${LOG_FILE:-}" ] && echo "log       : $(tildify "$LOG_FILE")"
+        if [ -n "${RUN_DIR:-}" ] && [ -s "${MANIFEST:-/nonexistent}" ]; then
+            echo "undo      : ./install.sh --restore $RUN_ID"
+        fi
         echo "next      : paste this block into the chat, or run ./install.sh --report"
         echo "==========================================================="
-    } | redact
+    } | redact | if [ -n "${LOG_FILE:-}" ] && [ -f "$LOG_FILE" ]; then tee -a "$LOG_FILE"; else cat; fi
+    rm -f "$ERR_FILE" "$ERR_FILE.cmd" "$ERR_FILE.out"
     exit 1
 }
 
@@ -162,14 +189,27 @@ parse_args() {
             --platform) shift; [ $# -gt 0 ] || die_usage "--platform needs a value"; PLATFORM="$1" ;;
             --platform=*) PLATFORM="${1#*=}" ;;
             --verbose)  VERBOSE=1 ;;
+            --yes)      ASSUME_YES=1 ;;
+            --link-only|--update-addons|--uninstall-hooks)
+                [ -n "$MODE" ] && die_usage "choose one mode: $MODE or ${1#--}"
+                MODE="${1#--}" ;;
+            --adopt)
+                [ -n "$MODE" ] && die_usage "choose one mode: $MODE or adopt"
+                shift; [ $# -gt 0 ] || die_usage "--adopt needs a file"; MODE=adopt; ADOPT_PATH="$1" ;;
+            --as)       shift; [ $# -gt 0 ] || die_usage "--as needs a repo path"; ADOPT_AS="$1" ;;
+            --restore)
+                [ -n "$MODE" ] && die_usage "choose one mode: $MODE or restore"
+                MODE=restore
+                if [ $# -gt 1 ] && [ "${2#-}" = "$2" ]; then shift; RESTORE_ID="$1"; fi ;;
             -h|--help)  usage; exit 0 ;;
-            --yes|--link-only|--adopt|--as|--update-addons|--restore|--uninstall-hooks)
-                die_usage "$1 belongs to the write path, which is built in phase 3" ;;
             *) die_usage "unknown option: $1" ;;
         esac
         shift
     done
-    [ -n "$MODE" ] || die_usage "choose a mode: --check, --dry-run or --report"
+    [ -n "$MODE" ] || MODE=install
+    [ -z "$ADOPT_AS" ] || [ "$MODE" = adopt ] || die_usage "--as only goes with --adopt"
+    case "$MODE" in check|dry-run|report) READ_ONLY=1 ;; *) READ_ONLY=0 ;; esac
+    [ "$MODE" = link-only ] && LINK_ONLY=1
     case "${PROFILE:-base}" in base|personal|office) ;; *) die_usage "unknown profile: $PROFILE" ;; esac
     if [ -n "$ONLY" ]; then
         case " $COMPONENTS " in
@@ -212,6 +252,15 @@ resolve_profile() {
     elif [ -r "$CONFIG_DIR/profile" ]; then
         read -r PROFILE < "$CONFIG_DIR/profile" || true
         PROFILE_NOTE="saved in ~/.config/dotfiles/profile"
+    elif [ "$MODE" = install ] || [ "$MODE" = link-only ]; then
+        if [ "$ASSUME_YES" = 0 ] && has_tty; then
+            printf 'Which profile is this machine? [b]ase / [p]ersonal / [o]ffice: ' > /dev/tty
+            read -r PROFILE < /dev/tty || PROFILE=""
+            case "$PROFILE" in b|base) PROFILE=base ;; p|personal) PROFILE=personal ;; o|office) PROFILE=office ;; esac
+            PROFILE_NOTE="chosen now; saved at the end of the run"
+        else
+            die_usage "no profile saved yet: add --profile base, personal or office"
+        fi
     else
         PROFILE=base
         PROFILE_NOTE="assumed: none saved yet and no --profile given"
@@ -358,8 +407,16 @@ show_packages() {
             ok)      item ok "$name" ;;
             outside) item ok "$name (installed outside Homebrew, left as is)" ;;
             skip)    item skip "$name (not for this platform)" ;;
-            unknown) item todo "$name (cannot query packages here)"; [ "$DRY_RUN" = 1 ] && pkg_install "$kind" "$name" ;;
-            missing) item todo "$name"; [ "$DRY_RUN" = 1 ] && pkg_install "$kind" "$name" ;;
+            unknown|missing)
+                if [ "$READ_ONLY" = 1 ]; then
+                    if [ "$state" = unknown ]; then item todo "$name (cannot query packages here)"; else item todo "$name"; fi
+                    [ "$DRY_RUN" = 1 ] && pkg_install "$kind" "$name"
+                else
+                    CURRENT_ACTION="pkg_install $name"
+                    pkg_install "$kind" "$name"
+                    record installed "$name"
+                    done_item "$name installed"
+                fi ;;
         esac
     done <<EOF
 $(package_lines)
@@ -378,8 +435,13 @@ show_addons() {
         state="$(addon_state "$url" "$live")"
         case "${state%%|*}" in
             ok)       item ok "$(tildify "$live")" ;;
-            missing)  item todo "$(tildify "$live") (not cloned)"
-                      [ "$DRY_RUN" = 1 ] && cmd_line "git clone --depth 1 $url $(tildify "$live")" ;;
+            missing)  if [ "$READ_ONLY" = 1 ]; then
+                          item todo "$(tildify "$live") (not cloned)"
+                          [ "$DRY_RUN" = 1 ] && cmd_line "git clone --depth 1 $url $(tildify "$live")"
+                      else
+                          clone_addon "$url" "$live"
+                          done_item "$(tildify "$live") cloned"
+                      fi ;;
             conflict) item warn "$(tildify "$live") ${state#*|}; left alone" ;;
         esac
     done <<EOF
@@ -406,7 +468,11 @@ show_links() {
         CURRENT_ACTION="link_state $repo"
         state="$(link_state "$repo" "$path" "$mech")"
         detail="${state#*|}"; state="${state%%|*}"
-        show_link_state "$repo" "$path" "$mech" "$state" "$detail"
+        if [ "$READ_ONLY" = 1 ]; then
+            show_link_state "$repo" "$path" "$mech" "$state" "$detail"
+        else
+            act_link_state "$repo" "$path" "$mech" "$state" "$detail"
+        fi
     done <<EOF
 $(link_lines)
 EOF
@@ -423,7 +489,10 @@ show_link_state() {
         stub-present) item ok "$t (stub present)" ;;
         missing)      item todo "$t (missing)"
                       if [ "$DRY_RUN" = 1 ]; then
-                          [ -d "$(dirname "$path")" ] || cmd_line "mkdir -p $(tildify "$(dirname "$path")")"
+                          if [ ! -d "$(dirname "$path")" ]; then
+                              if [ "$mech" = link:late ]; then note "(its folder comes from the plugin install in step 6)"
+                              else cmd_line "mkdir -p $(tildify "$(dirname "$path")")"; fi
+                          fi
                           cmd_line "ln -s $repo $t"
                       fi ;;
         identical)    item todo "$t (same as $repo, not linked yet)"
@@ -470,9 +539,14 @@ show_plugins() {
             tmux) runner="~/.tmux/plugins/tpm/bin/install_plugins" ;;
         esac
         if [ -z "$missing" ]; then item ok "$comp plugins"
-        else
+        elif [ "$READ_ONLY" = 1 ]; then
             item todo "$comp plugins missing: ${missing% }"
             [ "$DRY_RUN" = 1 ] && cmd_line "$runner"
+        elif [ -n "${DOTFILES_TEST_NO_PLUGINS:-}" ]; then
+            item skip "$comp plugins: not installed in tests"
+        else
+            CURRENT_ACTION="$comp plugins: ${missing% }"
+            if [ "$comp" = vim ]; then install_vim_plugins; else install_tmux_plugins; fi
         fi
     done
     return 0
@@ -491,8 +565,12 @@ show_hook() {
     if [ "$(git -C "$DOTFILES_DIR" config --get core.hooksPath 2>/dev/null || true)" = hooks ]; then
         item ok "pre-commit hook turned on for this clone"
     else
-        item todo "pre-commit hook not turned on for this clone"
-        [ "$DRY_RUN" = 1 ] && cmd_line "git -C $(tildify "$DOTFILES_DIR") config core.hooksPath hooks"
+        if [ "$READ_ONLY" = 1 ]; then
+            item todo "pre-commit hook not turned on for this clone"
+            [ "$DRY_RUN" = 1 ] && cmd_line "git -C $(tildify "$DOTFILES_DIR") config core.hooksPath hooks"
+        else
+            enable_hook
+        fi
     fi
     return 0
 }
@@ -508,14 +586,30 @@ preflight() {
 }
 
 summary() {
+    local r
     echo
-    printf 'Summary: ok %d, todo %d, ask %d, warn %d, FAIL %d, skip %d\n' \
-        "$N_OK" "$N_TODO" "$N_ASK" "$N_WARN" "$N_FAIL" "$N_SKIP"
-    if [ "$DRY_RUN" = 1 ]; then
-        echo "A real run would make $N_TODO changes and ask $N_ASK questions. Nothing was changed."
-    else
-        echo "Nothing was changed."
+    if [ "$READ_ONLY" = 1 ]; then
+        printf 'Summary: ok %d, todo %d, ask %d, warn %d, FAIL %d, skip %d\n' \
+            "$N_OK" "$N_TODO" "$N_ASK" "$N_WARN" "$N_FAIL" "$N_SKIP"
+        if [ "$DRY_RUN" = 1 ]; then
+            echo "A real run would make $N_TODO changes and ask $N_ASK questions. Nothing was changed."
+        else
+            echo "Nothing was changed."
+        fi
+        return 0
     fi
+    printf 'Summary: done %d, ok %d, warn %d, skip %d\n' "$N_DONE" "$N_OK" "$N_WARN" "$N_SKIP"
+    if [ -s "$MANIFEST" ]; then
+        echo "Backup and manifest: $(tildify "$RUN_DIR")"
+        echo "Undo this run:       ./install.sh --restore $RUN_ID"
+    else
+        echo "Nothing needed changing."
+    fi
+    if [ -n "$REPO_CHANGES" ]; then
+        echo "The repo has changes to review and commit:"
+        for r in $REPO_CHANGES; do echo "  $r"; done
+    fi
+    echo "Log: $(tildify "$LOG_FILE")"
 }
 
 mode_check() {
@@ -534,20 +628,29 @@ mode_check() {
 
 mode_dry_run() {
     step 1 "Preflight"; preflight | sed 's/^/  /'; check_subshell_failure
-    if wants packages; then
+    if wants packages && [ "$LINK_ONLY" = 0 ]; then
         step 2 "Package manager"; pkg_bootstrap
         step 3 "Packages";        show_packages
     else
         step 2 "Package manager"; item skip "not selected"
         step 3 "Packages";        item skip "not selected"
     fi
-    step 4 "Add-ons";             show_addons
+    if [ "$LINK_ONLY" = 0 ]; then step 4 "Add-ons"; show_addons
+    else step 4 "Add-ons"; item skip "--link-only"; fi
     step 5 "Links and stubs";     show_links early
-    step 6 "Plugins";             show_plugins
+    if [ "$LINK_ONLY" = 0 ]; then step 6 "Plugins"; show_plugins
+    else step 6 "Plugins"; item skip "--link-only"; fi
     step 7 "Late links";          show_links late
     step 8 "Private layer and git identities"; show_private
     step 9 "Finish";              show_hook
+    [ "$READ_ONLY" = 1 ] || save_profile
     summary
+}
+
+# A real run follows the same nine steps; the show_* functions act when READ_ONLY=0.
+mode_install() {
+    confirm_run
+    mode_dry_run
 }
 
 mode_report() {
@@ -564,10 +667,22 @@ mode_report() {
         echo
         mode_check
         echo
-        echo "install logs: none yet (logs start with the write path in phase 3)"
+        report_latest_log
         echo "==========================================================="
     } | redact
     check_subshell_failure
+}
+
+report_latest_log() {
+    local latest
+    latest="$(ls -1t "$HOME/.local/state/dotfiles"/install-*.md 2>/dev/null | head -n 1 || true)"
+    if [ -z "$latest" ]; then echo "install logs: none yet"; return 0; fi
+    echo "latest install log: $(tildify "$latest")"
+    if grep -q 'dotfiles: FAILED' "$latest"; then
+        sed -n '/dotfiles: FAILED/,/^=========================/p' "$latest"
+    else
+        echo "  (it finished without a failure)"
+    fi
 }
 
 main() {
@@ -589,6 +704,15 @@ main() {
         check)   mode_check ;;
         dry-run) mode_dry_run ;;
         report)  mode_report ;;
+        install|link-only|adopt|restore|update-addons|uninstall-hooks)
+            start_run
+            case "$MODE" in
+                install|link-only) run_logged mode_install ;;
+                adopt)             run_logged run_confirmed mode_adopt ;;
+                restore)           run_logged run_confirmed mode_restore ;;
+                update-addons)     run_logged run_confirmed mode_update_addons ;;
+                uninstall-hooks)   run_logged mode_uninstall_hooks ;;
+            esac ;;
     esac
 
     if [ "$VERBOSE" = 1 ]; then

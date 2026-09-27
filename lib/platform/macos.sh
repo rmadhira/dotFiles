@@ -28,25 +28,44 @@ _brew_load() {
 }
 
 # pkg_bootstrap: get Homebrew ready.
-# In the read-only modes it only reports; installing is built in phase 3.
+# In the read-only modes it only reports.
 pkg_bootstrap() {
-    local brew_line
+    local brew_line installer zp="$HOME/.zprofile"
     if [ -n "$BREW" ]; then
         item ok "Homebrew: $(tildify "$BREW")"
-    else
+    elif [ "$READ_ONLY" = 1 ]; then
         item todo "Homebrew is not installed"
         # shellcheck disable=SC2016  # printed for the user, not run
         [ "$DRY_RUN" = 1 ] && cmd_line '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+    else
+        CURRENT_ACTION="install Homebrew"
+        installer="$STATE_DIR/.homebrew-install.sh"
+        run_interactive sudo -v
+        run_cmd curl -fsSL -o "$installer" https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
+        run_cmd env NONINTERACTIVE=1 /bin/bash "$installer"
+        rm -f "$installer"
+        for BREW in /opt/homebrew/bin/brew /usr/local/bin/brew; do [ -x "$BREW" ] && break; done
+        eval "$("$BREW" shellenv)"
+        _BREW_LOADED=0
+        record system "-" "installed Homebrew"
+        done_item "Homebrew installed: $(tildify "$BREW")"
     fi
     # Homebrew asks for its shellenv line in ~/.zprofile; the one change ever made there.
-    if [ -f "$HOME/.zprofile" ] && grep -q 'brew shellenv' "$HOME/.zprofile"; then
+    if [ -f "$zp" ] && grep -q 'brew shellenv' "$zp"; then
         item ok "~/.zprofile loads Homebrew (left as is)"
     else
         brew_line="eval \"\$(${BREW:-/opt/homebrew/bin/brew} shellenv)\""
-        item todo "~/.zprofile has no Homebrew line; Homebrew's own line would be appended"
-        [ "$DRY_RUN" = 1 ] && cmd_line "append to ~/.zprofile: $brew_line"
+        if [ "$READ_ONLY" = 1 ]; then
+            item todo "~/.zprofile has no Homebrew line; Homebrew's own line would be appended"
+            [ "$DRY_RUN" = 1 ] && cmd_line "append to ~/.zprofile: $brew_line"
+        else
+            if [ -f "$zp" ]; then backup_copy "$zp"; record edited "$(rel_of "$zp")"
+            else : > "$zp"; mkdir -p "$RUN_DIR/created"; record created "$(rel_of "$zp")"; fi
+            printf '\n# >>> dotfiles: Homebrew >>>\n%s\n# <<< dotfiles: Homebrew <<<\n' "$brew_line" >> "$zp"
+            [ -e "$RUN_DIR/created/.zprofile" ] || cp -p "$zp" "$RUN_DIR/created/.zprofile" 2>/dev/null || true
+            done_item "~/.zprofile: Homebrew's line appended"
+        fi
     fi
-    [ "$MODE" = check ] || [ "$MODE" = dry-run ] || [ "$MODE" = report ] || not_built_yet "installing Homebrew"
     return 0
 }
 
@@ -72,12 +91,13 @@ pkg_installed() {
 pkg_install() {
     local kind="$1" brew_name
     brew_name="$(pkg_name_for "$2")"
-    if [ "$DRY_RUN" = 1 ]; then
+    if [ "$READ_ONLY" = 1 ]; then
         if [ "$kind" = cask ]; then cmd_line "brew install --cask $brew_name"
         else cmd_line "brew install $brew_name"; fi
         return 0
     fi
-    not_built_yet "installing packages"
+    if [ "$kind" = cask ]; then run_cmd "$BREW" install --cask "$brew_name"
+    else run_cmd "$BREW" install "$brew_name"; fi
 }
 
 # sed_inplace <expression> <file>

@@ -29,12 +29,18 @@ _apt_candidate() {
 }
 
 # pkg_bootstrap: one sudo prompt up front, apt update, charm.sh only if apt lacks glow.
-# In the read-only modes it only reports; running apt is built in phase 3.
+# In the read-only modes it only reports.
 pkg_bootstrap() {
     if [ "$DRY_RUN" = 1 ]; then
         item todo "apt needs root: one password prompt, up front"
         cmd_line "sudo -v"
-        cmd_line "sudo apt update"
+        cmd_line "sudo apt-get update"
+    elif [ "$READ_ONLY" = 0 ]; then
+        CURRENT_ACTION="prepare apt"
+        echo "        apt needs root: sudo asks for your password once, now."
+        run_interactive sudo -v
+        run_cmd sudo apt-get update
+        done_item "apt package lists updated"
     fi
     _dpkg_load
     if [ "$_DPKG_OK" = 0 ]; then
@@ -43,10 +49,17 @@ pkg_bootstrap() {
         item ok "glow source: glow is already installed"
     elif [ -n "$(_apt_candidate glow)" ]; then
         item ok "glow source: Ubuntu's own apt has glow"
-    else
+    elif [ "$READ_ONLY" = 1 ]; then
         item todo "glow source: apt has no glow, the charm.sh apt repo would be added"
+    else
+        CURRENT_ACTION="add the charm.sh apt repo"
+        run_cmd sudo mkdir -p /etc/apt/keyrings
+        run_cmd sudo bash -c 'curl -fsSL https://repo.charm.sh/apt/gpg.key | gpg --dearmor -o /etc/apt/keyrings/charm.gpg'
+        run_cmd sudo bash -c 'echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" > /etc/apt/sources.list.d/charm.list'
+        run_cmd sudo apt-get update
+        record system "-" "added the charm.sh apt repo"
+        done_item "glow source: charm.sh apt repo added"
     fi
-    [ "$MODE" = check ] || [ "$MODE" = dry-run ] || [ "$MODE" = report ] || not_built_yet "preparing apt"
     return 0
 }
 
@@ -64,11 +77,11 @@ pkg_installed() {
 
 # pkg_install <kind> <list name>: in a dry run, prints the command.
 pkg_install() {
-    if [ "$DRY_RUN" = 1 ]; then
-        cmd_line "sudo apt install -y $(pkg_name_for "$2")"
+    if [ "$READ_ONLY" = 1 ]; then
+        cmd_line "sudo apt-get install -y $(pkg_name_for "$2")"
         return 0
     fi
-    not_built_yet "installing packages"
+    run_cmd sudo apt-get install -y "$(pkg_name_for "$2")"
 }
 
 # sed_inplace <expression> <file>
