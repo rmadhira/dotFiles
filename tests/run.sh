@@ -213,6 +213,35 @@ after="$(cd "$H" && find . | sort | wc -l | tr -d ' ')"
 OUT="changed: ${changed:-none}; files before $before, after $((after - 1))"
 if [ -z "$changed" ] && [ "$after" = "$((before + 1))" ]; then pass "no file created, changed or removed"; else fail "fake home changed"; fi
 
+echo
+echo "shell files: aliases load in bash and zsh"
+new_home
+FAKEBIN="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-bin.XXXXXX")"
+probe='alias tls tattach tnewd cronls cactivate sbrc vbrc 2>&1; type ta 2>&1 | head -n 1; alias ztsts 2>&1'
+OUT="$(HOME="$H" /bin/bash --norc -i -c ". '$REPO/shell/bashrc'; $probe" 2>&1)"
+expect "bash: tmux aliases" "tattach='tmux attach-session -t'"
+expect "bash: ta is a function" "ta is a function"
+expect "bash: cron and conda aliases" "cactivate='conda activate'"
+expect "bash: vbrc edits ~/.bash_aliases" "vbrc='vim ~/.bash_aliases'"
+expect_not "bash: no ZeroTier aliases on the base profile" "ztsts='"
+mkdir -p "$H/.config/dotfiles"; echo personal > "$H/.config/dotfiles/profile"
+printf '#!/bin/sh\nexit 0\n' > "$FAKEBIN/zerotier-cli"; chmod +x "$FAKEBIN/zerotier-cli"
+OUT="$(HOME="$H" PATH="$FAKEBIN:$PATH" OSTYPE=linux-gnu /bin/bash --norc -i -c ". '$REPO/shell/bashrc'; alias ztsts ztstart" 2>&1)"
+expect "personal + zerotier-cli (Linux): ztsts uses sudo" "ztsts='sudo zerotier-cli status'"
+expect "personal + zerotier-cli (Linux): systemctl" "ztstart='sudo systemctl start zerotier-one'"
+if command -v zsh >/dev/null 2>&1; then
+    OUT="$(HOME="$H" PATH="$FAKEBIN:$PATH" zsh -f -i -c ". '$REPO/shell/zshrc'; alias vbrc tls; whence -w ta; alias ztsts" 2>&1)"
+    expect "zsh: vbrc edits ~/.zshrc" "vbrc='vim ~/.zshrc'"
+    expect "zsh: tmux aliases" "tls='tmux ls'"
+    expect "zsh: ta is a function" "ta: function"
+    case "$(uname -s)" in
+        Darwin) expect "personal + zerotier-cli (macOS): launchctl, no sudo for status" "ztsts='zerotier-cli status'" ;;
+    esac
+else
+    pass "zsh not installed; zsh checks skipped"
+fi
+rm -rf "$FAKEBIN"
+
 # ---------------------------------------------------------------- write path
 # Real runs change the repo too (hook setting, --adopt), so they use a copy.
 

@@ -45,8 +45,9 @@ The repo and my personal Mac have drifted in both directions, and `worksetup.sh`
 
 **Where `.zshrc` content belongs**
 
-- **Shared:** locale exports, `vbrc`/`sbrc`/`vtrc`, generic Taskwarrior aliases (`tstart`, `tstop`, `tann`, `tui`, `topen`).
-- **Private layer:** project-specific Taskwarrior aliases, launchers for scripts in a cloud-drive folder, a mosh alias to a LAN host, ZeroTier aliases, a cross-compiler `PATH` entry.
+- **Shared:** locale exports, `vbrc`/`sbrc`/`vtrc`, generic Taskwarrior aliases (`tstart`, `tstop`, `tann`, `tui`, `topen`), tmux session aliases (`tls`, `tattach`, `tnewd`, plus `ta <name>` to attach or create), `cronls`, and the generic conda aliases (`cactivate`, `cdeactiv`, `ceexport`).
+- **Personal profile (public):** ZeroTier aliases, defined only where `zerotier-cli` exists, with the macOS or Linux start/stop commands.
+- **Private layer:** project-specific Taskwarrior aliases, a tmux session and a conda environment named after a project, launchers for scripts in a cloud-drive folder, a mosh alias to a LAN host, a cross-compiler `PATH` entry.
 - **Local only:** the conda setup block. It hard-codes the home path and `conda init` rewrites it.
 
 **Tools on this Mac:** Homebrew, git, vim 9.1, tmux, glow, task, timew, tree, gh, taskwarrior-tui, taskopen, mosh and iTerm2 are installed. wget, fzf, ripgrep, jq, htop and bat are missing. Vundle and its five plugins, the atom-dark colour scheme, TPM and the Dracula tmux theme are present. The system bash is 3.2.57. Anaconda (conda 24.11, `defaults` channel, environments `base` and one project env) is installed twice: `~/anaconda3` (8.2 GB, in use) and `/opt/homebrew/anaconda3` from the Homebrew `anaconda` cask. Nothing in crontab or launch agents uses conda on this Mac.

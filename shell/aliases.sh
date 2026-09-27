@@ -28,6 +28,21 @@ alias topen='taskopen'
 alias tstart='task start'
 alias tstop='task stop'
 
+# tmux sessions
+alias tls='tmux ls'
+alias tattach='tmux attach-session -t'     # tattach <name>
+alias tnewd='tmux new-session -d -s'       # tnewd <name>: create a named session, detached
+# ta <name>: attach to the session, creating it first if it does not exist.
+ta() { tmux new-session -A -s "${1:?usage: ta <session name>}"; }
+
+# cron
+alias cronls='crontab -l'
+
+# conda. Defined everywhere: on macOS, conda's own setup runs after this file.
+alias cactivate='conda activate'
+alias cdeactiv='conda deactivate'
+alias ceexport='conda env export'
+
 # Ubuntu installs bat as batcat.
 if ! command -v bat >/dev/null 2>&1 && command -v batcat >/dev/null 2>&1; then
     alias bat='batcat'
