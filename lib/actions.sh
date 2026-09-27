@@ -46,11 +46,15 @@ run_logged() {
     return 0
 }
 
+# prune_logs: keep the 20 newest logs. Names are timestamps, so the glob's
+# alphabetical order is also the time order, oldest first.
 prune_logs() {
-    local f n=0
-    for f in $(ls -1t "$STATE_DIR"/install-*.md 2>/dev/null); do
+    local f total=0 n=0
+    for f in "$STATE_DIR"/install-*.md; do [ -e "$f" ] && total=$((total + 1)); done
+    for f in "$STATE_DIR"/install-*.md; do
+        [ -e "$f" ] || continue
         n=$((n + 1))
-        [ "$n" -le 20 ] || rm -f "$f"
+        [ "$n" -gt $((total - 20)) ] || rm -f "$f"
     done
     return 0
 }
@@ -87,7 +91,7 @@ backup_copy() {
     record copied "$rel"
 }
 
-done_item() { N_DONE=$((N_DONE + 1)); printf '  %-5s %s\n' done "$1"; }
+done_item() { N_DONE=$((N_DONE + 1)); printf '  %-5s %s\n' "done" "$1"; }
 
 # ---------------------------------------------------------------- commands and prompts
 
@@ -351,18 +355,20 @@ save_profile() {
 
 # ---------------------------------------------------------------- restore
 
+# latest_run: the newest run with a manifest that is not restored yet. Run names are
+# timestamps, so the glob's order is the time order; the last match is the newest.
 latest_run() {
-    local d
-    for d in $(ls -1t "$STATE_DIR/backup" 2>/dev/null); do
-        if [ -s "$STATE_DIR/backup/$d/manifest.txt" ] && [ ! -e "$STATE_DIR/backup/$d/restored" ]; then
-            printf '%s\n' "$d"; return 0
-        fi
+    local d found=""
+    for d in "$STATE_DIR"/backup/*/; do
+        d="${d%/}"
+        if [ -s "$d/manifest.txt" ] && [ ! -e "$d/restored" ]; then found="${d##*/}"; fi
     done
+    [ -z "$found" ] || printf '%s\n' "$found"
     return 0
 }
 
 mode_restore() {
-    local id="${RESTORE_ID:-}" dir action rel extra path target tmpdir
+    local id="${RESTORE_ID:-}" dir action rel extra path tmpdir
     [ -n "$id" ] || id="$(latest_run)"
     [ -n "$id" ] || stop_run "no run to restore in ~/.local/state/dotfiles/backup."
     dir="$STATE_DIR/backup/$id"
@@ -433,6 +439,7 @@ mode_adopt() {
     [ -L "$path" ] && stop_run "$t is already a symlink."
     [ -f "$path" ] || stop_run "$t is not a regular file (directories are not supported yet)."
     rel="$(rel_of "$path")"
+    # shellcheck disable=SC2088  # links.txt holds the literal text "~/..."
     if read_list "$DOTFILES_DIR/links.txt" | awk '{ print $2 }' | grep -qx "~/$rel"; then
         stop_run "$t is already managed in links.txt."
     fi
@@ -457,6 +464,7 @@ mode_adopt() {
         cp -p "$path" "$DOTFILES_DIR/$repo"
         cmp -s "$path" "$DOTFILES_DIR/$repo"
         backup_move "$path"; make_link "$repo" "$path"
+        # shellcheck disable=SC2088  # written literally into links.txt
         printf '%-22s %-46s %s\n' "$repo" "~/$rel" link >> "$DOTFILES_DIR/links.txt"
         REPO_CHANGES="$REPO_CHANGES $repo links.txt"
         done_item "$t moved into $repo and linked; added to links.txt"

@@ -15,6 +15,9 @@ set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
+# ls picks the single log or backup of a fresh fake home; the names are known.
+# shellcheck disable=SC2012
+
 # install.sh must never ask anything in a test, even when this runs in a terminal:
 # with this set it behaves as if there were no terminal and stops instead of asking.
 export DOTFILES_NO_TTY=1
@@ -164,6 +167,7 @@ echo "macOS: ~/.zprofile only gets Homebrew's line, and only when missing"
 new_home
 run --check --only packages --platform macos
 expect "no ~/.zprofile: Homebrew line would be added" "~/.zprofile has no Homebrew line"
+# shellcheck disable=SC2016  # Homebrew's line, written literally
 echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' > "$H/.zprofile"
 run --check --only packages --platform macos
 expect "Homebrew line present: left as is" "ok    ~/.zprofile loads Homebrew \(left as is\)"
@@ -319,6 +323,26 @@ runc --restore --yes
 expect_rc "restore again: exit 1" 1
 expect "restore again: clean message" "no run to restore"
 expect_not "restore again: no failure block" "FAILED"
+
+echo
+echo "write path: logs and runs are found in time order"
+new_home; new_copy
+mkdir -p "$H/.local/state/dotfiles"
+i=10; while [ "$i" -lt 35 ]; do echo old > "$H/.local/state/dotfiles/install-20200101-0000$i.md"; i=$((i + 1)); done
+runc --link-only --yes --profile base --only vim
+logs="$(ls "$H"/.local/state/dotfiles/install-*.md | wc -l | tr -d ' ')"
+check_file "only the 20 newest logs are kept (25 old + 1 new)" test "$logs" = 20
+check_file "the oldest logs went first" test ! -e "$H/.local/state/dotfiles/install-20200101-000010.md"
+first="$(ls -d "$H"/.local/state/dotfiles/backup/*/ | head -n 1)"; first="${first%/}"; first="${first##*/}"
+sleep 1
+runc --link-only --yes --only git
+runc --restore --yes
+expect "restore picks the newest run" "Restore run [0-9-]+"
+check_file "the newer run was restored first" sh -c "! grep -q 'Restore run $first' <<EOF
+$OUT
+EOF"
+runc --restore --yes
+expect "the next restore picks the older run" "Restore run $first"
 
 echo
 echo "write path: a file that differs, with --yes"

@@ -29,6 +29,7 @@ _brew_load() {
 
 # pkg_bootstrap: get Homebrew ready.
 # In the read-only modes it only reports.
+# shellcheck disable=SC2088  # "~/.zprofile" in messages is display text
 pkg_bootstrap() {
     local brew_line installer zp="$HOME/.zprofile"
     if [ -n "$BREW" ]; then

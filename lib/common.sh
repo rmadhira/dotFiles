@@ -676,7 +676,9 @@ mode_report() {
 
 report_latest_log() {
     local latest
-    latest="$(ls -1t "$HOME/.local/state/dotfiles"/install-*.md 2>/dev/null | head -n 1 || true)"
+    local f
+    latest=""
+    for f in "$HOME/.local/state/dotfiles"/install-*.md; do [ -e "$f" ] && latest="$f"; done   # timestamps: last is newest
     if [ -z "$latest" ]; then echo "install logs: none yet"; return 0; fi
     echo "latest install log: $(tildify "$latest")"
     if grep -q 'dotfiles: FAILED' "$latest"; then
