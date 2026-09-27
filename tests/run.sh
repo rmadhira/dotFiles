@@ -55,11 +55,11 @@ echo "install.sh tests with $(/bin/bash --version | head -n 1)"
 echo
 echo "usage"
 new_home
-run;                               expect_rc "no mode: exit 2" 2
+run;                               expect_rc "no mode (a real run) without a profile: exit 2" 2; expect "asks for --profile" "add --profile"
 run --check --dry-run;             expect_rc "two modes: exit 2" 2
 run --check --only nope;           expect_rc "bad --only: exit 2" 2
 run --check --profile work;        expect_rc "bad --profile: exit 2" 2
-run --adopt x;                     expect_rc "write-path option: exit 2" 2; expect "write-path option explains" "phase 3"
+run --check --as x;                expect_rc "--as without --adopt: exit 2" 2
 mkdir -p "$H/.config/dotfiles"; echo bogus > "$H/.config/dotfiles/profile"
 run --check;                       expect_rc "bad saved profile: exit 2" 2
 run --help;                        expect_rc "--help: exit 0" 0; expect "--help shows modes" "--dry-run"
@@ -170,8 +170,8 @@ expect "plugin command" "\+ vim \+PluginInstall \+qall"
 expect "says nothing changed" "Nothing was changed"
 run --dry-run --only packages --platform debian
 expect "debian: one sudo prompt" "\+ sudo -v"
-expect "debian: apt install" "\+ sudo apt install -y git"
-expect_not "debian: macOS-only package skipped" "apt install -y taskopen"
+expect "debian: apt-get install" "\+ sudo apt-get install -y git"
+expect_not "debian: macOS-only package skipped" "apt-get install -y taskopen"
 run --dry-run --only packages --platform macos
 expect "macOS: cask install" "\+ brew install --cask iterm2|ok    iterm2"
 
@@ -212,6 +212,135 @@ changed="$(cd "$H" && find . -newer .marker | grep -v '^\.$' || true)"
 after="$(cd "$H" && find . | sort | wc -l | tr -d ' ')"
 OUT="changed: ${changed:-none}; files before $before, after $((after - 1))"
 if [ -z "$changed" ] && [ "$after" = "$((before + 1))" ]; then pass "no file created, changed or removed"; else fail "fake home changed"; fi
+
+# ---------------------------------------------------------------- write path
+# Real runs change the repo too (hook setting, --adopt), so they use a copy.
+
+C=""
+new_copy() {
+    [ -n "$C" ] && rm -rf "$C"
+    C="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-copy.XXXXXX")"; C="$(cd "$C" && pwd -P)"
+    cp -R "$REPO/." "$C/"
+    git -C "$C" config --unset core.hooksPath 2>/dev/null || true
+}
+# runc <args...>: install.sh from the copy, fake home, no plugin installs, no terminal input.
+runc() {
+    OUT="$(HOME="$H" DOTFILES_TEST_NO_PLUGINS=1 /bin/bash "$C/install.sh" "$@" 2>&1 < /dev/null)"
+    RC=$?
+}
+check_file() {  # check_file <label> <test expression...>
+    local label="$1"; shift
+    if "$@"; then pass "$label"; else OUT="(file check failed: $*)"; fail "$label"; fi
+}
+cleanup_copy() { [ -n "$C" ] && rm -rf "$C"; cleanup; }
+trap cleanup_copy EXIT
+
+echo
+echo "write path: link, stub, re-run, restore"
+new_home; new_copy
+cp "$C/vim/vimrc" "$H/.vimrc"
+printf '[pull]\n\tff = only\n' > "$H/.gitconfig"; cp "$H/.gitconfig" "$H/gitconfig.orig"
+runc --link-only --yes --profile base
+expect_rc "link-only run: exit 0" 0
+check_file "identical ~/.vimrc became a link" test -L "$H/.vimrc"
+check_file "~/.gitconfig starts with the stub" test "$(head -n 1 "$H/.gitconfig")" = "# >>> dotfiles >>>"
+check_file "~/.gitconfig keeps its lines below" grep -q "ff = only" "$H/.gitconfig"
+check_file "~/.zshrc created with the stub" grep -q ">>> dotfiles >>>" "$H/.zshrc"
+check_file "profile saved" test "$(cat "$H/.config/dotfiles/profile")" = base
+check_file "hook turned on in the clone" test "$(git -C "$C" config --get core.hooksPath)" = hooks
+expect "late link without its plugin folder: warns" "warn  ~/.tmux/plugins/tmux/scripts/task_timew.sh"
+check_file "late link did not create the plugin folder" test ! -e "$H/.tmux/plugins/tmux"
+expect "summary names the undo command" "Undo this run: +./install.sh --restore"
+log="$(ls "$H"/.local/state/dotfiles/install-*.md | head -n 1)"
+check_file "a log was written" test -s "$log"
+check_file "the log is redacted" sh -c "! grep -qF '$H' '$log'"
+runc --link-only --yes
+expect_rc "re-run: exit 0" 0
+expect "re-run changes nothing" "Nothing needed changing"
+runc --restore --yes
+expect_rc "restore: exit 0" 0
+check_file "restore: ~/.gitconfig byte-identical" cmp -s "$H/.gitconfig" "$H/gitconfig.orig"
+check_file "restore: ~/.vimrc a regular file again" sh -c "[ -f '$H/.vimrc' ] && [ ! -L '$H/.vimrc' ]"
+check_file "restore: created ~/.zshrc removed" test ! -e "$H/.zshrc"
+check_file "restore: profile removed" test ! -e "$H/.config/dotfiles/profile"
+check_file "restore: hook setting back" test -z "$(git -C "$C" config --get core.hooksPath || true)"
+runc --restore --yes
+expect_rc "restore again: exit 1" 1
+expect "restore again: clean message" "no run to restore"
+expect_not "restore again: no failure block" "FAILED"
+
+echo
+echo "write path: a file that differs, with --yes"
+new_home; new_copy
+echo '" my old vimrc' > "$H/.vimrc"
+runc --link-only --yes --profile base --only vim
+check_file "--yes keeps the repo version: now a link" test -L "$H/.vimrc"
+bk="$(ls -d "$H"/.local/state/dotfiles/backup/*/ | head -n 1)"
+check_file "the old file is in the backup" grep -q "my old vimrc" "${bk}files/.vimrc"
+
+echo
+echo "write path: late link once the plugin folder exists"
+new_home; new_copy
+mkdir -p "$H/.tmux/plugins/tmux/scripts"
+runc --link-only --yes --profile base --only tmux
+check_file "task_timew.sh linked into the plugin folder" test -L "$H/.tmux/plugins/tmux/scripts/task_timew.sh"
+
+echo
+echo "write path: add-ons"
+new_home; new_copy
+ADDON="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-addon.XXXXXX")"
+git -C "$ADDON" init -q && git -C "$ADDON" -c user.name=t -c user.email=t@users.noreply.github.com commit -q --allow-empty -m init
+printf 'vim  file://%s  ~/.vim/bundle/Vundle.vim\n' "$ADDON" > "$C/addons.txt"
+runc --yes --profile base --only vim
+expect_rc "install --only vim: exit 0" 0
+check_file "add-on cloned" test -d "$H/.vim/bundle/Vundle.vim/.git"
+expect "plugins not installed in tests" "vim plugins: not installed in tests"
+runc --restore --yes
+check_file "restore moves the clone aside" test ! -e "$H/.vim/bundle/Vundle.vim"
+printf 'vim  file:///nonexistent/dotfiles-test  ~/.vim/bundle/Vundle.vim\n' > "$C/addons.txt"
+new_home
+runc --yes --profile base --only vim
+expect_rc "failing clone: exit 1" 1
+expect "failure block" "dotfiles: FAILED"
+expect "failure block names the command" "command   : git clone --depth 1 file:///nonexistent"
+expect "failure block shows its output" "last output:"
+log="$(ls "$H"/.local/state/dotfiles/install-*.md | head -n 1)"
+check_file "failure block is in the log" grep -q "dotfiles: FAILED" "$log"
+runc --report --only vim
+expect "report shows the latest failure" "latest install log:.*"
+expect "report includes the failure block" "command   : git clone"
+rm -rf "$ADDON"
+
+echo
+echo "write path: --adopt"
+new_home; new_copy
+mkdir -p "$H/.config/htop"; echo "color_scheme=1" > "$H/.config/htop/htoprc"
+runc --adopt "$H/.config/htop/htoprc" --as htop/htoprc --yes
+expect_rc "adopt: exit 0" 0
+check_file "adopt: live file is now a link" test -L "$H/.config/htop/htoprc"
+check_file "adopt: file is in the repo copy" grep -q "color_scheme=1" "$C/htop/htoprc"
+check_file "adopt: links.txt has the line" grep -q "^htop/htoprc .*~/.config/htop/htoprc .*link" "$C/links.txt"
+runc --restore --yes
+check_file "restore after adopt: original file back" sh -c "[ ! -L '$H/.config/htop/htoprc' ] && grep -q color_scheme=1 '$H/.config/htop/htoprc'"
+printf 'server=/%s/alice/x\n' Users > "$H/personal.conf"    # built at runtime: the hook scans this file too
+runc --adopt "$H/personal.conf" --yes
+expect_rc "adopt refuses personal data: exit 1" 1
+expect "adopt says why" "look personal"
+echo "x" > "$H/.zshrc"
+runc --adopt "$H/.zshrc" --yes
+expect_rc "adopt refuses a stub-managed file: exit 1" 1
+
+echo
+echo "write path: safety"
+new_home; new_copy
+if (exec < /dev/tty) 2>/dev/null; then
+    pass "no-terminal check skipped (running in a terminal)"
+else
+    runc --link-only --profile base
+    expect_rc "no --yes and no terminal: exit 1" 1
+    expect "stops before changing anything" "needs a terminal to confirm"
+    check_file "nothing was changed" test ! -e "$H/.vimrc"
+fi
 
 echo
 printf 'Result: %d passed, %d failed\n' "$PASS" "$FAIL"
