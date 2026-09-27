@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared bash config, sourced by the dotfiles stub at the top of ~/.bashrc.
 # Everything specific to one machine stays in ~/.bashrc and ~/.bash_aliases.
 

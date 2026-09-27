@@ -41,6 +41,7 @@ note()     { printf '        %s\n' "$1"; }
 section()  { CURRENT_STEP="$1"; printf '\n%s\n' "$1"; }
 step()     { section "[$1/$STEPS] $2"; }
 
+# shellcheck disable=SC2088  # "~" is display text here, never expanded
 tildify() {
     case "$1" in
         "$HOME")   printf '~\n' ;;
@@ -48,6 +49,7 @@ tildify() {
         *)         printf '%s\n' "$1" ;;
     esac
 }
+# shellcheck disable=SC2088  # matches the literal "~/" prefix used in links.txt
 expand_home() {
     case "$1" in
         "~/"*) printf '%s/%s\n' "$HOME" "${1#"~/"}" ;;
@@ -169,8 +171,11 @@ parse_args() {
     done
     [ -n "$MODE" ] || die_usage "choose a mode: --check, --dry-run or --report"
     case "${PROFILE:-base}" in base|personal|office) ;; *) die_usage "unknown profile: $PROFILE" ;; esac
-    if [ -n "$ONLY" ] && ! in_list "$ONLY" "$(printf '%s\n' $COMPONENTS)"; then
-        die_usage "unknown component for --only: $ONLY (one of: $COMPONENTS)"
+    if [ -n "$ONLY" ]; then
+        case " $COMPONENTS " in
+            *" $ONLY "*) ;;
+            *) die_usage "unknown component for --only: $ONLY (one of: $COMPONENTS)" ;;
+        esac
     fi
     case "$PLATFORM" in ""|macos|debian) ;; *) die_usage "unknown platform: $PLATFORM" ;; esac
     [ "$MODE" = dry-run ] && DRY_RUN=1
@@ -184,7 +189,9 @@ detect_platform() {
         Darwin) PLATFORM=macos ;;
         Linux)
             if [ -r /etc/os-release ]; then
+                # shellcheck source=/dev/null
                 id="$(. /etc/os-release; printf '%s' "${ID:-}")"
+                # shellcheck source=/dev/null
                 id_like="$(. /etc/os-release; printf '%s' "${ID_LIKE:-}")"
                 case " $id $id_like " in
                     *" debian "*|*" ubuntu "*) PLATFORM=debian ;;
@@ -225,6 +232,7 @@ check_subshell_failure() {
 
 platform_line() {
     local release
+    # shellcheck source=/dev/null
     case "$PLATFORM" in
         macos)  release="macOS $(sw_vers -productVersion 2>/dev/null || echo '?')" ;;
         debian) release="$( (. /etc/os-release 2>/dev/null && printf '%s' "${PRETTY_NAME:-}") || true)" ;;
@@ -449,6 +457,7 @@ show_plugins() {
     for comp in vim tmux; do
         wants "$comp" || continue
         missing="$(plugin_missing "$comp")"
+        # shellcheck disable=SC2088  # the runner is printed, not run
         case "$comp" in
             vim)  runner="vim +PluginInstall +qall" ;;
             tmux) runner="~/.tmux/plugins/tpm/bin/install_plugins" ;;
@@ -495,10 +504,11 @@ summary() {
     echo
     printf 'Summary: ok %d, todo %d, ask %d, warn %d, FAIL %d, skip %d\n' \
         "$N_OK" "$N_TODO" "$N_ASK" "$N_WARN" "$N_FAIL" "$N_SKIP"
-    case "$MODE" in
-        dry-run) echo "A real run would make $N_TODO changes and ask $N_ASK questions. Nothing was changed." ;;
-        *)       echo "Nothing was changed." ;;
-    esac
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "A real run would make $N_TODO changes and ask $N_ASK questions. Nothing was changed."
+    else
+        echo "Nothing was changed."
+    fi
 }
 
 mode_check() {
@@ -542,9 +552,7 @@ mode_report() {
         v="$(tmux -V 2>/dev/null || true)";                        printf '  %-5s %s\n' tmux "${v:-not found}"
         printf '  %-5s %s\n' bash "$BASH_VERSION (running); login shell: ${SHELL:-unknown}"
         echo
-        MODE=check
         mode_check
-        MODE=report
         echo
         echo "install logs: none yet (logs start with the write path in phase 3)"
         echo "==========================================================="

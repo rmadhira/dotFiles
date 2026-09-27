@@ -2,7 +2,10 @@
 # Defines exactly the six platform functions (see docs/DESIGN.md, Platform layer).
 # shellcheck shell=bash
 
+# Both are read by lib/common.sh, which shellcheck checks separately.
+# shellcheck disable=SC2034
 PLATFORM_OS=macos
+# shellcheck disable=SC2034
 PKG_COLUMN=2    # brew column in packages/map.txt
 
 BREW=""
@@ -32,6 +35,7 @@ pkg_bootstrap() {
     fi
     if [ "$DRY_RUN" = 1 ]; then
         item todo "Homebrew is not installed"
+        # shellcheck disable=SC2016  # printed for the user, not run
         cmd_line '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
         return 0
     fi

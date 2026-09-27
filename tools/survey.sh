@@ -10,6 +10,9 @@
 #
 # Works with macOS's /bin/bash 3.2 and Linux bash 5. See docs/DESIGN.md.
 
+# ls is used only to count and list known names.
+# shellcheck disable=SC2012
+
 set -u
 
 REPO_URL="https://github.com/rmadhira/dotFiles.git"
@@ -75,8 +78,8 @@ survey_common() {
     echo "includeIf entries     : $(git config --global --get-regexp '^includeif\.' 2>/dev/null | wc -l | tr -d ' ')"
     # Key file names can contain personal words, so only counts are shown.
     if [ -d "$HOME/.ssh" ]; then
-        all="$(cd "$HOME/.ssh" && ls *.pub 2>/dev/null | wc -l | tr -d ' ')"
-        conv="$(cd "$HOME/.ssh" && ls *_key.pub 2>/dev/null | wc -l | tr -d ' ')"
+        all="$(cd "$HOME/.ssh" && ls -- *.pub 2>/dev/null | wc -l | tr -d ' ')"
+        conv="$(cd "$HOME/.ssh" && ls -- *_key.pub 2>/dev/null | wc -l | tr -d ' ')"
         echo "ssh public keys       : $all ($conv named <account>_key; names not shown)"
     else
         echo "ssh public keys       : no ~/.ssh folder"
@@ -122,13 +125,11 @@ survey_macos() {
     fi
 
     section "apps"
-    for app in iTerm.app; do
-        where="-"
-        for dir in /Applications "$HOME/Applications"; do
-            [ -d "$dir/$app" ] && where="$dir/$app"
-        done
-        echo "  $app: $where"
+    where="-"
+    for dir in /Applications "$HOME/Applications"; do
+        [ -d "$dir/iTerm.app" ] && where="$dir/iTerm.app"
     done
+    echo "  iTerm.app: $where"
     if [ -n "$brew_bin" ]; then
         echo "  iterm2 managed by Homebrew: $(yesno "$brew_bin" list --cask iterm2)"
     fi
@@ -137,6 +138,7 @@ survey_macos() {
 survey_linux() {
     section "Linux"
     if [ -r /etc/os-release ]; then
+        # shellcheck source=/dev/null
         . /etc/os-release
         echo "release  : ${PRETTY_NAME:-unknown} (ID=${ID:-?} ID_LIKE=${ID_LIKE:-})"
     fi

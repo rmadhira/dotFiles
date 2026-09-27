@@ -1,3 +1,4 @@
+# shellcheck shell=bash  # also sourced by zsh
 # Shell load order, shared by shell/zshrc and shell/bashrc (see docs/DESIGN.md,
 # Private layer). Later files override earlier ones. Every file is optional, so
 # a machine without the private layer still gets a working shell.
@@ -15,6 +16,8 @@ fi
 DOTFILES_HOST="${HOSTNAME:-${HOST:-}}"
 DOTFILES_HOST="${DOTFILES_HOST%%.*}"
 
+# Optional files at runtime-computed paths, by design.
+# shellcheck source=/dev/null
 _dotfiles_source() { [ -f "$1" ] && . "$1"; }
 
 _dotfiles_source "$DOTFILES_DIR/shell/aliases.sh"                              # 1. shared

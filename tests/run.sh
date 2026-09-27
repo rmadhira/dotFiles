@@ -8,6 +8,9 @@
 #
 # bash 3.2 compatible. See docs/DESIGN.md.
 
+# Expected output contains literal "~/" paths.
+# shellcheck disable=SC2088
+
 set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"

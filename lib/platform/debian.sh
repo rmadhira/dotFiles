@@ -2,7 +2,10 @@
 # Defines exactly the six platform functions (see docs/DESIGN.md, Platform layer).
 # shellcheck shell=bash
 
+# Both are read by lib/common.sh, which shellcheck checks separately.
+# shellcheck disable=SC2034
 PLATFORM_OS=linux
+# shellcheck disable=SC2034
 PKG_COLUMN=3    # apt column in packages/map.txt
 
 _DPKG_LOADED=0

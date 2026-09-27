@@ -1,3 +1,4 @@
+# shellcheck shell=bash  # also sourced by zsh; tests/run.sh and the shell tests cover both
 # Shared aliases and settings for zsh and bash, on every machine.
 # Personal aliases live in the private layer; one-machine ones in the local rc file.
 
