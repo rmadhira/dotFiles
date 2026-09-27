@@ -8,15 +8,13 @@
 #
 # bash 3.2 compatible. See docs/DESIGN.md.
 
-# Expected output contains literal "~/" paths.
-# shellcheck disable=SC2088
+# File-wide, so before the first command: expected output contains literal "~/"
+# paths (SC2088), and ls picks logs and backups of a fresh fake home (SC2012).
+# shellcheck disable=SC2088,SC2012
 
 set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-
-# ls picks the single log or backup of a fresh fake home; the names are known.
-# shellcheck disable=SC2012
 
 # install.sh must never ask anything in a test, even when this runs in a terminal:
 # with this set it behaves as if there were no terminal and stops instead of asking.
