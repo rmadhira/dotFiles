@@ -217,8 +217,10 @@ echo
 echo "shell files: aliases load in bash and zsh"
 new_home
 FAKEBIN="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-bin.XXXXXX")"
-probe='alias tls tattach tnewd cronls cactivate sbrc vbrc 2>&1; type ta 2>&1 | head -n 1; alias ztsts 2>&1'
-OUT="$(HOME="$H" /bin/bash --norc -i -c ". '$REPO/shell/bashrc'; $probe" 2>&1)"
+probe='alias tls tattach tnewd cronls cactivate sbrc vbrc 2>&1; type ta 2>&1 | head -n 1; alias ztsts 2>&1; alias vdrc'
+OUT="$(HOME="$H" /bin/bash --norc -i -c ". '$REPO/shell/bashrc'; $probe; echo dir=\$DOTFILES_DIR" 2>&1)"
+expect "bash: vdrc opens the shared aliases file" "vdrc='vim \"\\\$DOTFILES_DIR/shell/aliases.sh\"'"
+expect "bash: DOTFILES_DIR points at the repo" "dir=$REPO\$"
 expect "bash: tmux aliases" "tattach='tmux attach-session -t'"
 expect "bash: ta is a function" "ta is a function"
 expect "bash: cron and conda aliases" "cactivate='conda activate'"

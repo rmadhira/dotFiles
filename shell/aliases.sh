@@ -20,6 +20,8 @@ else
     alias sbrc='source ~/.bashrc'
 fi
 alias vtrc='vim ~/.taskrc'
+# The shared aliases in the repo (this file), wherever the repo lives. Reload with sbrc.
+alias vdrc='vim "$DOTFILES_DIR/shell/aliases.sh"'
 
 # Taskwarrior
 alias tui='taskwarrior-tui'

@@ -187,8 +187,9 @@ This table is not hard-coded in the installer. It is the content of `links.txt` 
 | `vbrc` | `vim ~/.zshrc` | `vim ~/.bash_aliases` |
 | `sbrc` | `source ~/.zshrc` | `source ~/.bashrc` |
 | `vtrc` | `vim ~/.taskrc` | `vim ~/.taskrc` |
+| `vdrc` | `vim <repo>/shell/aliases.sh` | `vim <repo>/shell/aliases.sh` |
 
-These edit the **local** files. Shared aliases are edited in the public repo, and personal ones in the private layer.
+`vbrc` and `vtrc` edit the **local** files, for aliases on this machine only (below the stub). `vdrc` edits the shared `shell/aliases.sh` in the repo, for aliases on every machine; commit and push it, then `git pull` elsewhere. `sbrc` reloads after either. Personal aliases go in the private layer, not in `vdrc`'s file.
 
 ## Declared lists and --adopt
 
