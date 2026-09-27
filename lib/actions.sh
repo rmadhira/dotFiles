@@ -63,6 +63,12 @@ record() {
 
 rel_of() { printf '%s\n' "${1#"$HOME"/}"; }
 
+# "~" kept in a variable: bash 5 tilde-expands a literal ~ in the replacement of
+# ${var//pattern/replacement}, which turned "~" back into the home path on Linux.
+TILDE='~'
+# home_to_tilde <text>: every occurrence of the home path shown as ~.
+home_to_tilde() { printf '%s\n' "${1//"$HOME"/$TILDE}"; }
+
 # backup_move <path>: move a file or link out of the way, into the run's backup.
 backup_move() {
     local rel dst
@@ -89,18 +95,18 @@ done_item() { N_DONE=$((N_DONE + 1)); printf '  %-5s %s\n' done "$1"; }
 run_cmd() {
     local out rc line shown="$*" cr
     cr="$(printf '\r')"
-    cmd_line "${shown//$HOME/~}"
+    cmd_line "$(home_to_tilde "$shown")"
     out="$STATE_DIR/.last-output.$$"
     set +e
     # Progress lines end in carriage returns; keep only what follows the last one.
     "$@" < /dev/null 2>&1 | tee "$out" | while IFS= read -r line; do
-        line="${line##*"$cr"}"; line="${line//$HOME/~}"
+        line="${line##*"$cr"}"; line="${line//"$HOME"/$TILDE}"
         printf '          %s\n' "$line"
     done
     rc=${PIPESTATUS[0]}
     set -e
     if [ "$rc" -ne 0 ]; then
-        printf '%s' "${shown//$HOME/~}" > "$ERR_FILE.cmd"
+        home_to_tilde "$shown" > "$ERR_FILE.cmd"
         tail -n 20 "$out" > "$ERR_FILE.out" 2>/dev/null || true
     fi
     rm -f "$out"
@@ -110,7 +116,7 @@ run_cmd() {
 # run_interactive <command...>: for commands that talk to the terminal (sudo -v).
 run_interactive() {
     local shown="$*"
-    cmd_line "${shown//$HOME/~}"
+    cmd_line "$(home_to_tilde "$shown")"
     "$@" < /dev/tty
 }
 

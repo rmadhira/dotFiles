@@ -47,10 +47,11 @@ report() {
 }
 
 TAB="$(printf '\t')"
+TILDE='~'    # in a variable: bash 5 would expand a literal ~ in ${var/pat/~}
 if [ "${1:-}" = --file ]; then
     # Every line of one file, labelled with its name.
     [ -r "${2:-}" ] || { echo "pre-commit: cannot read ${2:-(no file given)}" >&2; exit 2; }
-    lines="$(awk -v f="${2/#$HOME/~}" '{ printf "%s\t%d\t%s\n", f, NR, $0 }' "$2")"
+    lines="$(awk -v f="${2/#"$HOME"/$TILDE}" '{ printf "%s\t%d\t%s\n", f, NR, $0 }' "$2")"
 else
     lines="$(added_lines | grep -v "^hooks/pre-commit$TAB")"    # its own rules would match
 fi
@@ -82,7 +83,7 @@ fi
 
 if [ -s "$tmp_hits" ]; then
     {
-        if [ "${1:-}" = --file ]; then echo "Possible personal data in ${2/#$HOME/~}:"
+        if [ "${1:-}" = --file ]; then echo "Possible personal data in ${2/#"$HOME"/$TILDE}:"
         else echo "pre-commit: possible personal data in staged changes. Commit blocked."; fi
         cat "$tmp_hits"
         echo "Move personal data to the private layer or a local file,"
