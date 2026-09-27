@@ -106,7 +106,8 @@ Config is grouped by tool, and profiles are thin overlays on a shared base. New 
 dotFiles/
   install.sh                 # entry point; replaces worksetup.sh. Detects OS, sources one platform file
   lib/
-    common.sh                # shared: linking, stubs, backups, check, restore, profiles, logging
+    common.sh                # shared: options, detection, lists, states, modes, output, failure block
+    actions.sh               # the write path: commands, backups, manifest, stubs, links, prompts, restore, adopt
     platform/macos.sh        # Homebrew; BSD command flags
     platform/debian.sh       # apt (Debian, Ubuntu); GNU command flags
     platform/fedora.sh       # later: dnf
@@ -390,7 +391,7 @@ Homebrew on macOS and apt on Ubuntu/Debian, driven by plain-text package lists t
 3. **Packages:** `common.txt`, then the profile's list.
 4. **Add-ons:** git clones from `addons.txt` (Vundle, TPM).
 5. **Links and stubs:** `link` and `stub` lines from `links.txt`.
-6. **Plugins:** `vim +PluginInstall +qall` and TPM's `bin/install_plugins`, so no manual `prefix + I` is needed. This needs step 5, because both tools read their config file to know what to install.
+6. **Plugins:** `vim +PluginInstall +qall` (run headless with `vim -E -s`) and TPM's `bin/install_plugins`, so no manual `prefix + I` is needed. TPM needs a tmux server, so the installer starts a private one on its own socket (`tmux -L dotfiles-install-<pid>`), points TPM at it, and stops it afterwards. Any tmux session already running is never touched. This needs step 5, because both tools read their config file to know what to install.
 7. **Late links:** `link:late` lines, which point into folders the plugins just created. A late link never creates folders: if the plugin's folder is missing, because the plugin failed to install, it warns and skips, since creating the folder would make the plugin manager think the plugin is installed.
 8. **Private layer and git identities** (personal profile only): clone or check the private layer, then write the identity block from its list.
 9. **Finish:** turn on the repo's pre-commit hook, then print the summary.
@@ -455,7 +456,7 @@ Every list is parsed with plain `while read` loops, without associative arrays, 
 | --- | --- | --- | --- |
 | `pkg_bootstrap` | Gets the package manager ready | Xcode CLT check; install Homebrew if missing; load `shellenv` | `sudo -v` (one password prompt, up front); `sudo apt update`; add the charm.sh repo only if apt has no glow |
 | `pkg_installed <name>` | Is this package already installed? | `brew list --formula`; for casks, `brew list --cask` **or** the app bundle already in `/Applications` or `~/Applications` (reported as "ok, installed outside Homebrew" and never reinstalled) | `dpkg -s` |
-| `pkg_install <name>…` | Installs packages; `cask:` entries only on macOS | `brew install`, `brew install --cask` | `sudo apt install -y`; skips `cask:` entries |
+| `pkg_install <name>…` | Installs packages; `cask:` entries only on macOS | `brew install`, `brew install --cask` | `sudo apt-get install -y`; skips `cask:` entries |
 | `sed_inplace <expr> <file>` | Edits a file in place | `sed -i ''` | `sed -i` |
 | `file_mtime <file>` | Modification time, for backups and logs | `stat -f %m` | `stat -c %Y` |
 | `resolve_path <path>` | Absolute path with symlinks followed | `cd` + `pwd -P` loop (no `readlink -f` on older macOS) | `readlink -f` |
@@ -479,7 +480,7 @@ One script with a mode for each job. The two read-only modes are the default way
 | `--link-only` | Yes | Links and stubs only, no packages. For machines where I cannot install software. |
 | `--adopt <path> [--as <repo path>]` | Yes | Moves a live file into the repo, links it and adds it to `links.txt`. See Declared lists and --adopt. |
 | `--update-addons` | Yes | `git pull --ff-only` on every add-on in `addons.txt` whose remote matches. |
-| `--restore [timestamp]` | Yes | Puts back files from a backup (the latest by default) and removes the links and stub blocks. |
+| `--restore [run]` | Yes | Undoes a run (the latest not yet restored, by default), replaying its manifest in reverse. See Safety. |
 | `--uninstall-hooks` | Yes | Removes the repo's pre-commit hook. |
 
 `--only` limits a run to one component, which is how the execution phases below roll things out one at a time. A component covers its `links.txt` lines, its add-ons and its plugin step: `vim` means the vimrc link, Vundle and `:PluginInstall`. `git` includes the identity block, and `private` is the private layer clone. Every real run writes a markdown log to `~/.local/state/dotfiles/install-<timestamp>.md`, not the current directory.
@@ -494,7 +495,7 @@ The Linux servers have no Claude access, so the installer must explain itself we
 
 - Numbered step headers: `[4/9] Installing add-ons`.
 - One line per action with a fixed result word: `ok` (already right), `done` (changed), `skip` (not for this platform or profile), `FAIL`. The read-only modes use three more: `todo` (a real run would change this), `ask` (a real run would ask first) and `warn` (needs attention, and is left alone).
-- Every external command is printed before it runs, prefixed with `+` (`+ sudo apt install -y fzf`), and its output is shown and logged.
+- Every external command is printed before it runs, prefixed with `+` (`+ sudo apt-get install -y fzf`), and its output is shown and logged.
 - The first lines show what the run detected: platform, OS release, architecture, bash version, profile, repo commit, and whether the repo has uncommitted changes.
 
 **On failure**
@@ -505,7 +506,7 @@ The installer stops at the first failure. Nothing later runs on top of a broken 
 ==================== dotfiles: FAILED ====================
 step      : [3/9] Installing packages
 action    : pkg_install fzf
-command   : sudo apt install -y fzf
+command   : sudo apt-get install -y fzf
 exit code : 100
 location  : lib/platform/debian.sh:42 (pkg_install)
 platform  : debian | Ubuntu 22.04.5 LTS | x86_64 | bash 5.1.16
@@ -538,6 +539,10 @@ Every file the installer touches is backed up first, and one command undoes a ru
 - Before a symlink: the existing file is **moved** (`mv`, never `rm`) into the backup.
 - Before adding a stub block: the file is **copied** into the backup, then edited in place, so its inode and permissions stay the same.
 - Backups are never deleted automatically.
+
+**How `--restore` undoes each action.** Links it made are removed, but only if they still point where it left them. Moved files are put back, unless something new is in their place. Stub blocks are removed by their markers, so lines added to the file since, by me or by conda, stay. A file the run created is removed only if it still holds nothing but the stub. Clones are moved aside into the restore run's own backup, never deleted. Packages are not uninstalled; the restore lists them. The hook setting and the saved profile go back to their previous values. A run is marked restored and cannot be restored twice.
+
+**Confirmation and questions.** A real run asks once before changing anything ("Continue? [y/N]"), and on the first run asks which profile the machine is, unless `--profile` is given. Questions go to the terminal. With `--yes` there are no questions: it confirms and picks "keep repo" for files that differ. Without `--yes` and without a terminal, the run stops cleanly before changing anything. A clean stop prints its reason and exits 1, without the failure block, which is kept for real failures.
 
 **Decisions for each file during a real run**
 

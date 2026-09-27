@@ -33,6 +33,6 @@ There is no build step. Before committing a script:
 shellcheck <script>            # if installed (a personal package from phase 4)
 ```
 
-`tests/run.sh` must pass before every commit that touches `install.sh` or `lib/`. It sets `HOME` to a temporary folder, so never run `install.sh` against the real home folder to test a change.
+`tests/run.sh` must pass before every commit that touches `install.sh` or `lib/`. It sets `HOME` to a temporary folder, and runs real (write) modes against a throwaway copy of the repo, with `DOTFILES_TEST_NO_PLUGINS=1` so no plugins are downloaded. Never run a real install against the real home folder to test a change; the rollout order in the design decides where real runs happen.
 
 `tools/survey.sh` is a read-only machine survey. It redacts the home path and hostname, and shows SSH keys only as counts, because key file names can contain personal words. Its output still describes a real machine, so it belongs in chat, never in a committed file.
