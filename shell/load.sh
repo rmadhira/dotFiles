@@ -25,6 +25,6 @@ _dotfiles_source "$DOTFILES_DIR/shell/profiles/$DOTFILES_PROFILE.sh"           #
 _dotfiles_source "$DOTFILES_CONFIG/private/shell/$DOTFILES_PROFILE.sh"         # 3. profile, private layer
 _dotfiles_source "$DOTFILES_CONFIG/private/shell/hosts/$DOTFILES_HOST.sh"      # 4. this host, private layer
 _dotfiles_source "$DOTFILES_CONFIG/$DOTFILES_PROFILE.local.sh"                 # 5. this machine only
-# 6. The rest of the local ~/.zshrc or ~/.bashrc runs after this file returns.
+# 6. The rest of the local ~/.zshrc or ~/.bash_aliases runs after this file returns.
 
 unset -f _dotfiles_source

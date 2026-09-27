@@ -251,6 +251,9 @@ repo_line() {
 
 wants() { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
 
+# bashrc_loads_aliases: does ~/.bashrc load ~/.bash_aliases (Ubuntu's default does)?
+bashrc_loads_aliases() { [ -f "$HOME/.bashrc" ] && grep -q '\.bash_aliases' "$HOME/.bashrc"; }
+
 # plural <count> <noun>: "1 line", "5 lines".
 plural() { if [ "$1" = 1 ]; then printf '1 %s\n' "$2"; else printf '%s %ss\n' "$1" "$2"; fi; }
 
@@ -396,6 +399,10 @@ show_links() {
         case "$which:$mech" in early:link:late|late:link|late:stub:*) continue ;; esac
         shown=1
         path="$(expand_home "$live")"
+        if [ "$path" = "$HOME/.bash_aliases" ] && ! bashrc_loads_aliases; then
+            item skip "$(tildify "$path"): ~/.bashrc does not load it, so the stub goes in ~/.bashrc"
+            path="$HOME/.bashrc"
+        fi
         CURRENT_ACTION="link_state $repo"
         state="$(link_state "$repo" "$path" "$mech")"
         detail="${state#*|}"; state="${state%%|*}"
@@ -513,7 +520,10 @@ summary() {
 
 mode_check() {
     preflight
-    if wants packages; then section "Packages"; show_packages; fi
+    if wants packages; then
+        section "Package manager"; pkg_bootstrap
+        section "Packages";        show_packages
+    fi
     section "Add-ons";        show_addons
     section "Managed files";  show_links all
     section "Plugins";        show_plugins

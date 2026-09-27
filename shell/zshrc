@@ -1,5 +1,5 @@
 # Shared zsh config, sourced by the dotfiles stub at the top of ~/.zshrc.
-# Everything specific to one machine stays in ~/.zshrc, below the stub.
+# My own lines stay in ~/.zshrc, below the stub. ~/.zprofile and ~/.zshenv are left alone.
 
 # Repo root: two levels up from this file, symlinks resolved.
 DOTFILES_DIR="${DOTFILES_DIR:-${${(%):-%x}:A:h:h}}"

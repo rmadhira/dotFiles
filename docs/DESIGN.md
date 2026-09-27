@@ -37,8 +37,8 @@ The repo and my personal Mac have drifted in both directions, and `worksetup.sh`
 | `.tmux.conf` | Regular file | Mac: Dracula `task_timew.sh` status line enabled | Mac version wins |
 | `task_timew.sh` | Hand-copied into `~/.tmux/plugins/tmux/scripts/` | Identical | Installer links it |
 | `.zshrc` | Regular file, not in repo | Mac only | Split into shared, profile and local parts |
-| `.zprofile` | Homebrew `shellenv` + `rbenv init` | Mac only | Shared part into repo, with guards |
-| `.zshenv` | Sources `~/.cargo/env` | Mac only | Guarded, or kept local |
+| `.zprofile` | Homebrew `shellenv` + `rbenv init` | Mac only | Left alone: Homebrew and rbenv wrote those lines |
+| `.zshenv` | Sources `~/.cargo/env` | Mac only | Left alone: rustup wrote it |
 | `.gitconfig` | Per-folder identity through `includeIf` | Mac only | Shared settings into repo; identity list into the private layer |
 | `.taskrc` | Default file | Mac only | Minimal shared version |
 | `.bash_aliases` | Missing | Repo only, mostly commented-out Linux aliases | Useful lines into shared `shell/aliases.sh` or the private layer; the repo file is then removed. On Linux, the live `~/.bash_aliases` stays a local file |
@@ -121,8 +121,8 @@ dotFiles/
   tmux/tmux.conf             # symlinked to ~/.tmux.conf
   tmux/task_timew.sh         # symlinked into the Dracula scripts folder
   shell/
-    zshrc  zprofile  zshenv  # sourced from the local ~/.zshrc etc.
-    bashrc
+    zshrc                    # sourced from the local ~/.zshrc (macOS)
+    bashrc                   # sourced from the local ~/.bash_aliases (Linux)
     load.sh                  # the shell load order, shared by zshrc and bashrc
     aliases.sh               # shared by bash and zsh
     profiles/personal.sh     # generic personal extras
@@ -163,18 +163,20 @@ Everything below the block is local: the conda block, machine-only settings, one
 | `~/.vimrc` | A: symlink | `vim/vimrc` | nothing |
 | `~/.tmux.conf` | A: symlink | `tmux/tmux.conf` | nothing |
 | `~/.tmux/plugins/tmux/scripts/task_timew.sh` | A: symlink, after plugins | `tmux/task_timew.sh` | nothing |
-| `~/.zshrc` (macOS) | B: `source` | `shell/zshrc` | conda, machine-only settings |
-| `~/.zprofile` (macOS) | B: `source` | `shell/zprofile` | rbenv, other tool inits |
-| `~/.zshenv` (macOS) | B: `source` | `shell/zshenv` | cargo env |
-| `~/.bashrc` (Linux) | B: `source` | `shell/bashrc` | distro defaults already in the file |
+| `~/.zshrc` (macOS) | B: `source` | `shell/zshrc` | conda, my own lines, machine-only settings |
+| `~/.bash_aliases` (Linux) | B: `source` | `shell/bashrc` | my own aliases and lines |
 | `~/.gitconfig` | B: `[include] path =` | `git/gitconfig` | default identity, and the generated `includeIf` block (see Git identities) |
 | `~/.taskrc` | B: `include` | `task/taskrc` | `data.location` and the task data itself (not synced), contexts, private projects. The shared `task/taskrc` uses only settings valid in both 2.6 and 3.x |
 
-This table is not hard-coded in the installer. It is the content of `links.txt` (see Declared lists and --adopt). The zsh files are managed on macOS only, so bash-only servers do not get empty `~/.zshrc` files.
+This table is not hard-coded in the installer. It is the content of `links.txt` (see Declared lists and --adopt).
 
-`shell/zshrc` and `shell/bashrc` both source `shell/load.sh`, which runs the shell load order described under Private layer. `shell/zprofile` sets up Homebrew for the right architecture (`/opt/homebrew` or `/usr/local`) and runs tool inits such as rbenv only when the tool exists (`command -v rbenv && eval …`).
+**The rule for existing files.** Existing files are never replaced. At most, one marked block is added at the top of the one shell file meant for me (`~/.zshrc` or `~/.bash_aliases`), plus the include block in `~/.gitconfig` and `~/.taskrc`. Each is backed up first and removed by `--restore`. Files the installer adds are symlinks, unless a tool writes to them: `git config --global` and `task config` write to `~/.gitconfig` and `~/.taskrc`, so those stay real files with an include even when they are new. Everything else is left alone, including `~/.bashrc`, `~/.zprofile` and `~/.zshenv`, whose lines came from the OS, Homebrew, conda, rbenv or rustup.
 
-**bash on Linux.** `shell/bashrc` starts with `[[ $- == *i* ]] || return`. The stub sits at the top of `~/.bashrc`, before Ubuntu's own interactive check, so without this guard the shared config would also run for `scp` and `ssh host command`, where any output breaks the transfer. `~/.bash_aliases` stays a local file, because Ubuntu's default `~/.bashrc` already sources it. It becomes the bash equivalent of the local part of `~/.zshrc`.
+**macOS: only `~/.zshrc`.** Aliases belong in `~/.zshrc`, which every interactive zsh reads. `~/.zprofile` runs only for login shells, so aliases defined there vanish in nested shells. `~/.zshrc` is created if missing, as on a fresh Mac. The one exception to "left alone": when the installer itself installs Homebrew, it adds Homebrew's own recommended `shellenv` line to `~/.zprofile` if no such line is there, exactly as Homebrew's installer instructs.
+
+**Linux: `~/.bash_aliases`, not `~/.bashrc`.** Ubuntu's stock `~/.bashrc` already loads `~/.bash_aliases` after its own interactive check. The stub goes at the top of `~/.bash_aliases`, created if missing, so `~/.bashrc`, with its distro defaults and conda block, is never touched. If `~/.bashrc` does not mention `.bash_aliases`, the installer puts the stub in `~/.bashrc` instead and says so. `shell/bashrc` still starts with `[[ $- == *i* ]] || return`, which matters in that fallback, where the stub runs before Ubuntu's interactive check: without the guard, shared config would run for `scp` and `ssh host command`, where any output breaks the transfer.
+
+`shell/zshrc` and `shell/bashrc` both source `shell/load.sh`, which runs the shell load order described under Private layer.
 
 **Shell-aware edit aliases** in `shell/aliases.sh`, so the same names work everywhere:
 
@@ -198,9 +200,7 @@ vim/vimrc              ~/.vimrc                                       link
 tmux/tmux.conf         ~/.tmux.conf                                   link
 tmux/task_timew.sh     ~/.tmux/plugins/tmux/scripts/task_timew.sh     link:late
 shell/zshrc            ~/.zshrc                                       stub:sh      macos
-shell/zprofile         ~/.zprofile                                    stub:sh      macos
-shell/zshenv           ~/.zshenv                                      stub:sh      macos
-shell/bashrc           ~/.bashrc                                      stub:sh      linux
+shell/bashrc           ~/.bash_aliases                                stub:sh      linux
 git/gitconfig          ~/.gitconfig                                   stub:gitconfig
 task/taskrc            ~/.taskrc                                      stub:taskrc
 ```
@@ -278,7 +278,7 @@ Two repos with different audiences. `dotFiles` is public and holds everything an
 | `dotFiles` (public repo) | `git pull` | all | tools, shared config, installer, profiles without personal content |
 | `~/.config/dotfiles/private/` = `dotFiles-private` | `git pull` | personal laptops and servers | personal aliases, git identities list, hostnames, PII patterns, unscrubbed notes |
 | `~/.config/dotfiles/` (other files) | never | this machine only | chosen profile, `office.local.sh` on office machines |
-| local `~/.zshrc`, `~/.bashrc` below the stub | never | this machine only | conda and other tool-written blocks, one-off experiments |
+| local `~/.zshrc`, `~/.bash_aliases` below the stub; `~/.bashrc`, `~/.zprofile` as they are | never | this machine only | conda and other tool-written blocks, my own lines, one-off experiments |
 
 **Private repo layout**
 
@@ -300,7 +300,7 @@ It holds no scripts. The public installer reads it. SSH keys and tokens do not g
 3. `private/shell/<profile>.sh`, if it exists.
 4. `private/shell/hosts/<short-hostname>.sh`, if it exists.
 5. `~/.config/dotfiles/<profile>.local.sh`, if it exists: this machine only.
-6. The rest of the local `~/.zshrc` or `~/.bashrc`, below the stub.
+6. The rest of the local `~/.zshrc` or `~/.bash_aliases`, below the stub.
 
 Every step is guarded with `[ -f … ]`, so a machine without the private layer still gets a working shell.
 
@@ -386,7 +386,7 @@ Homebrew on macOS and apt on Ubuntu/Debian, driven by plain-text package lists t
 **Run order.** A full run has nine numbered steps, the numbers the output shows (`[3/9]`). `--only` and `--link-only` run the relevant subset in the same order.
 
 1. **Preflight:** detect the platform, read the profile, check the repo. Nothing is changed.
-2. **Package manager:** `pkg_bootstrap`. On macOS: Homebrew through its official installer if missing, then its `shellenv` is loaded for the rest of the run. On Linux: `sudo -v` first, so the password is asked once, up front, with a line saying why. Then `sudo apt update`, and the charm.sh repo only if glow is missing **and** apt has no glow package (26.04 has one; 22.04 probably does not).
+2. **Package manager:** `pkg_bootstrap`. On macOS: Homebrew through its official installer if missing, then its `shellenv` is loaded for the rest of the run. If `~/.zprofile` has no Homebrew `shellenv` line, Homebrew's recommended line is appended to it, the one change ever made to that file. On Linux: `sudo -v` first, so the password is asked once, up front, with a line saying why. Then `sudo apt update`, and the charm.sh repo only if glow is missing **and** apt has no glow package (26.04 has one; 22.04 probably does not).
 3. **Packages:** `common.txt`, then the profile's list.
 4. **Add-ons:** git clones from `addons.txt` (Vundle, TPM).
 5. **Links and stubs:** `link` and `stub` lines from `links.txt`.
@@ -574,7 +574,7 @@ The repo is public, so PII is kept out in three layers: where content lives, a p
 | Personal aliases, paths (cloud drives, project folders), hostnames, private IPs, mosh targets | private layer: `private/shell/personal.sh`, `private/shell/hosts/` |
 | SSH host definitions, keys | local `~/.ssh/`, never in either repo |
 | Anything work-related | `~/.config/dotfiles/office.local.sh`, on the office machine only; never in either repo |
-| Tool-generated blocks (conda, nvm, rustup) | local `~/.zshrc` / `~/.bashrc` |
+| Tool-generated blocks (conda, nvm, rustup) | where the tool wrote them: local `~/.zshrc`, `~/.bashrc`, `~/.zprofile`, `~/.zshenv` |
 
 Repo files refer to home as `$HOME` or `~`, never `/Users/<name>` or `/home/<name>`.
 
@@ -675,6 +675,7 @@ The decisions below are settled. The open questions need an answer before the ph
 | macOS shell | zsh, with a repo-managed `.zshrc` | macOS default |
 | Base tools | git, vim, tmux, curl, wget, glow, taskwarrior, timewarrior, fzf, ripgrep, jq, tree, gh, htop, bat, taskwarrior-tui, taskopen, mosh, iTerm2 (macOS), Vundle, TPM, vim-atom-dark (via Vundle) | tools I need on every machine |
 | Files tools edit | local stub + `source`/`include`, not symlink | installers write to `~/.zshrc` directly |
+| Shell hook | one stub at the top of `~/.zshrc` (macOS) or `~/.bash_aliases` (Linux, falling back to `~/.bashrc` only if it does not load `.bash_aliases`); `~/.bashrc`, `~/.zprofile`, `~/.zshenv` left alone | existing system and tool files stay exactly as they are |
 | Machine-specific shell content | below the stub in the local file | conda and others write there anyway |
 | Profiles | `personal` and `office` overlays on a shared base | keep work and home apart |
 | Public repo | no PII; hook plus review | repo is public on GitHub |

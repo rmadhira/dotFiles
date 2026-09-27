@@ -28,18 +28,26 @@ _brew_load() {
 }
 
 # pkg_bootstrap: get Homebrew ready.
+# In the read-only modes it only reports; installing is built in phase 3.
 pkg_bootstrap() {
+    local brew_line
     if [ -n "$BREW" ]; then
         item ok "Homebrew: $(tildify "$BREW")"
-        return 0
-    fi
-    if [ "$DRY_RUN" = 1 ]; then
+    else
         item todo "Homebrew is not installed"
         # shellcheck disable=SC2016  # printed for the user, not run
-        cmd_line '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
-        return 0
+        [ "$DRY_RUN" = 1 ] && cmd_line '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
     fi
-    not_built_yet "installing Homebrew"
+    # Homebrew asks for its shellenv line in ~/.zprofile; the one change ever made there.
+    if [ -f "$HOME/.zprofile" ] && grep -q 'brew shellenv' "$HOME/.zprofile"; then
+        item ok "~/.zprofile loads Homebrew (left as is)"
+    else
+        brew_line="eval \"\$(${BREW:-/opt/homebrew/bin/brew} shellenv)\""
+        item todo "~/.zprofile has no Homebrew line; Homebrew's own line would be appended"
+        [ "$DRY_RUN" = 1 ] && cmd_line "append to ~/.zprofile: $brew_line"
+    fi
+    [ "$MODE" = check ] || [ "$MODE" = dry-run ] || [ "$MODE" = report ] || not_built_yet "installing Homebrew"
+    return 0
 }
 
 # pkg_installed <kind> <list name> [app bundle]: prints ok, outside, missing or skip.

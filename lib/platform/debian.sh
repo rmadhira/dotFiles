@@ -29,24 +29,25 @@ _apt_candidate() {
 }
 
 # pkg_bootstrap: one sudo prompt up front, apt update, charm.sh only if apt lacks glow.
+# In the read-only modes it only reports; running apt is built in phase 3.
 pkg_bootstrap() {
     if [ "$DRY_RUN" = 1 ]; then
         item todo "apt needs root: one password prompt, up front"
         cmd_line "sudo -v"
         cmd_line "sudo apt update"
-        _dpkg_load
-        if [ "$_DPKG_OK" = 0 ]; then
-            item skip "glow source: apt is not available here, cannot tell"
-        elif in_list glow "$_DPKG_INSTALLED" || command -v glow >/dev/null 2>&1; then
-            item ok "glow source: glow is already installed"
-        elif [ -n "$(_apt_candidate glow)" ]; then
-            item ok "glow source: Ubuntu's own apt has glow"
-        else
-            item todo "glow source: apt has no glow, the charm.sh apt repo would be added"
-        fi
-        return 0
     fi
-    not_built_yet "preparing apt"
+    _dpkg_load
+    if [ "$_DPKG_OK" = 0 ]; then
+        item skip "glow source: apt is not available here, cannot tell"
+    elif in_list glow "$_DPKG_INSTALLED" || command -v glow >/dev/null 2>&1; then
+        item ok "glow source: glow is already installed"
+    elif [ -n "$(_apt_candidate glow)" ]; then
+        item ok "glow source: Ubuntu's own apt has glow"
+    else
+        item todo "glow source: apt has no glow, the charm.sh apt repo would be added"
+    fi
+    [ "$MODE" = check ] || [ "$MODE" = dry-run ] || [ "$MODE" = report ] || not_built_yet "preparing apt"
+    return 0
 }
 
 # pkg_installed <kind> <list name> [app bundle]: prints ok, missing, skip or unknown.

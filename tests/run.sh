@@ -101,10 +101,44 @@ rm "$H/.gitconfig"; ln -s "$REPO/git/gitconfig" "$H/.gitconfig"
 run --check --only git;            expect "stub file that is a symlink" "warn  ~/.gitconfig \(is a symlink"
 
 echo
-echo "platform columns in links.txt"
+echo "shell hook: ~/.zshrc on macOS, ~/.bash_aliases on Linux"
 new_home
-run --check --only shell --platform macos;  expect "macOS: zshrc managed" "~/.zshrc"; expect_not "macOS: no bashrc" "~/.bashrc"
-run --check --only shell --platform debian; expect "Linux: bashrc managed" "~/.bashrc"; expect_not "Linux: no zshrc" "~/.zshrc"
+run --check --only shell --platform macos
+expect "macOS: zshrc managed" "~/.zshrc"
+expect_not "macOS: zprofile left alone" "~/.zprofile"
+expect_not "macOS: zshenv left alone" "~/.zshenv"
+expect_not "macOS: no bash files" "~/.bash"
+printf '# ~/.bashrc: Ubuntu default\nif [ -f ~/.bash_aliases ]; then\n    . ~/.bash_aliases\nfi\n' > "$H/.bashrc"
+run --check --only shell --platform debian
+expect "Linux: stub goes in ~/.bash_aliases" "todo  ~/.bash_aliases \(missing; would be created"
+expect_not "Linux: ~/.bashrc left alone" "~/.bashrc \("
+expect_not "Linux: no zshrc" "~/.zshrc"
+echo "alias ll='ls -l'" > "$H/.bash_aliases"
+run --check --only shell --platform debian
+expect "Linux: existing ~/.bash_aliases keeps its lines" "todo  ~/.bash_aliases \(no stub yet; keeps its 1 line"
+printf '# a ~/.bashrc that does not load the aliases file\n' > "$H/.bashrc"
+run --check --only shell --platform debian
+expect "Linux fallback: says why" "~/.bashrc does not load it, so the stub goes in ~/.bashrc"
+expect "Linux fallback: ~/.bashrc gets the stub" "todo  ~/.bashrc \(no stub yet"
+
+echo
+echo "macOS: ~/.zprofile only gets Homebrew's line, and only when missing"
+new_home
+run --check --only packages --platform macos
+expect "no ~/.zprofile: Homebrew line would be added" "~/.zprofile has no Homebrew line"
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' > "$H/.zprofile"
+run --check --only packages --platform macos
+expect "Homebrew line present: left as is" "ok    ~/.zprofile loads Homebrew \(left as is\)"
+
+echo
+echo "every read-only mode, both platforms, packages selected"
+new_home
+for plat in macos debian; do
+    for mode in --check --dry-run --report; do
+        run "$mode" --only packages --platform "$plat"
+        expect_rc "$plat $mode: exit 0" 0
+    done
+done
 
 echo
 echo "add-ons"

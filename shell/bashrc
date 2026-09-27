@@ -1,9 +1,11 @@
 # shellcheck shell=bash
-# Shared bash config, sourced by the dotfiles stub at the top of ~/.bashrc.
-# Everything specific to one machine stays in ~/.bashrc and ~/.bash_aliases.
+# Shared bash config, sourced by the dotfiles stub at the top of ~/.bash_aliases
+# (or of ~/.bashrc, on a machine whose ~/.bashrc does not load ~/.bash_aliases).
+# My own lines stay in ~/.bash_aliases below the stub; ~/.bashrc is left alone.
 
 # Non-interactive shells (scp, "ssh host command", scripts that source
-# ~/.bashrc) stop here, so shared config never prints into them.
+# ~/.bashrc) stop here, so shared config never prints into them. Ubuntu only
+# loads ~/.bash_aliases interactively, but the ~/.bashrc fallback needs this.
 [[ $- == *i* ]] || return
 
 # Repo root: two levels up from this file, symlinks resolved.
