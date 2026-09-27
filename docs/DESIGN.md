@@ -1,6 +1,6 @@
 # dotFiles: Cross-Platform Setup Design
 
-2026-09-25 · Status: Draft for review
+2026-09-25 · Status: phases 0–3 done (2026-09-27); phase 4 next
 
 > This file lives in a public repo. It describes machine audits in general terms only: no personal names, emails, home paths, hostnames or IPs. The one name that appears is my GitHub account, which is public in the repo URL anyway.
 
@@ -345,7 +345,7 @@ On personal machines, the git identity follows the folder. Each GitHub account g
 **Two fixes to the current setup**
 
 1. **Add `-o IdentitiesOnly=yes`:** `core.sshCommand = "ssh -i ~/.ssh/<account>_key -o IdentitiesOnly=yes"`. Without it, ssh first offers every key loaded in `ssh-agent`. GitHub picks the account from the first key it accepts, so a push can authenticate as the wrong account. Identity files the installer creates include this, and `--check` warns when an existing one lacks it.
-2. **Set `user.useConfigOnly = true` in the shared `git/gitconfig`.** Outside the identity folders, git then refuses to commit rather than guessing an identity from the hostname. On office machines, the local `~/.gitconfig` sets the work identity as the default, so nothing changes there. Before this is linked on a machine, `--check` lists any repos outside the identity folders, since commits in them will start failing.
+2. **Set `user.useConfigOnly = true` in the shared `git/gitconfig`.** Outside the identity folders, git then refuses to commit rather than guessing an identity from the hostname. On office machines, the local `~/.gitconfig` sets the work identity as the default, so nothing changes there. Before this is linked on a machine, `--check` lists any repos outside the identity folders, since commits in them will start failing. Once it is active, `--check` and every run report the machine's git identity: a default, per-folder rules, or a warning that git will refuse to commit. The office Mac needs its work identity set by hand (`git config --global user.name` and `user.email`, stored below the stub), and server B has none until phase 5.
 
 Also use `gitdir/i:` instead of `gitdir:`. The match then ignores letter case, which suits macOS's case-insensitive disk and is harmless on Linux.
 
@@ -393,6 +393,7 @@ Homebrew on macOS and apt on Ubuntu/Debian, driven by plain-text package lists t
 3. **Packages:** `common.txt`, then the profile's list.
 4. **Add-ons:** git clones from `addons.txt` (Vundle, TPM).
 5. **Links and stubs:** `link` and `stub` lines from `links.txt`.
+   Homebrew installs run with `HOMEBREW_NO_ENV_HINTS=1` and `HOMEBREW_NO_EMOJI=1`, which drops hint paragraphs and emoji that arrived garbled when output was pasted.
    apt never stops to ask: every apt-get call runs with `DEBIAN_FRONTEND=noninteractive` (package questions take their defaults), `NEEDRESTART_MODE=l` (needrestart lists services that need a restart instead of asking or restarting them) and `--force-confdef --force-confold` (a config file I changed is kept on upgrade). Found on server B, where needrestart's full-screen dialog took over the first real run.
 6. **Plugins:** `vim +PluginInstall +qall` (run headless with `vim -E -s`) and TPM's `bin/install_plugins`, so no manual `prefix + I` is needed. TPM needs a tmux server, so the installer starts a private one on its own socket (`tmux -L dotfiles-install-<pid>`), points TPM at it, and stops it afterwards. Any tmux session already running is never touched. This needs step 5, because both tools read their config file to know what to install.
 7. **Late links:** `link:late` lines, which point into folders the plugins just created. A late link never creates folders: if the plugin's folder is missing, because the plugin failed to install, it warns and skips, since creating the folder would make the plugin manager think the plugin is installed.
@@ -617,6 +618,16 @@ Work happens on a branch, `redesign`, which is pushed but only merged into `mast
 | 5 | Private layer and identities: create `dotFiles-private` (private) and fill it from the personal Mac; add the private-layer clone and identity block to the installer; switch the personal Mac to the noreply email. Then move server B to `--profile personal`, with its own keys | personal Mac, server B | Yes | A new shell loads the private aliases on both; commits in both dotfiles repos and each identity folder show the right noreply author; the office Mac's `--dry-run` shows no private-layer steps | Delete the private repo and `--restore`; the public setup still works without it |
 | 6 | Server A: `--check`, bring drift worth keeping into the repo (take-live prompt or `--adopt`), then link one `--only` at a time, shell last. First, a full install in an `ubuntu:22.04` container on server B, which has Docker, as a rehearsal | server A | Yes | `--check` clean; a new login shell works; the next scheduled run of each of its four cron jobs succeeds (the shared `bashrc` exits early for non-interactive shells, so cron behaviour should not change) | `--restore` on server A |
 | 7 | Clean up: remove `worksetup.sh` and the old root dotfiles, write `README.md`, merge to `master`. Then turn on GitHub email privacy and the push block, once every personal machine uses the noreply email | none | No | README steps work as written | `git revert` |
+
+**Progress**
+
+| Phase | Done | Notes |
+| --- | --- | --- |
+| 0 | 2026-09-25 | design, `CLAUDE.md`, survey of all four machines |
+| 1 | 2026-09-26 | repo content, pre-commit hook |
+| 2 | 2026-09-26 | read-only installer; `--check` on all four machines; shellcheck clean |
+| 3 | 2026-09-27 | write path. Real runs, re-runs and restore on server B (26.04) and the office Mac (macOS 26.4); deliberate failure on server B; tests pass under bash 3.2 and 5.3. Fixed along the way: needrestart's dialog, `~` on bash 5, tests that could prompt |
+| 4 | next | link the personal Mac |
 
 **Rules during execution**
 
