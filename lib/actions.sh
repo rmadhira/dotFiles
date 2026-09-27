@@ -120,7 +120,9 @@ run_interactive() {
     "$@" < /dev/tty
 }
 
-has_tty() { (exec < /dev/tty) 2>/dev/null; }
+# has_tty: can we ask questions? DOTFILES_NO_TTY=1 (set by tests/run.sh) says no,
+# so a test can never reach a prompt, even when run from a terminal.
+has_tty() { [ -z "${DOTFILES_NO_TTY:-}" ] && (exec < /dev/tty) 2>/dev/null; }
 
 # stop_run <message>: end the run cleanly, without the failure block.
 stop_run() {

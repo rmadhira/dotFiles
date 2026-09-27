@@ -14,6 +14,10 @@
 set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+
+# install.sh must never ask anything in a test, even when this runs in a terminal:
+# with this set it behaves as if there were no terminal and stops instead of asking.
+export DOTFILES_NO_TTY=1
 PASS=0
 FAIL=0
 H=""
@@ -24,15 +28,49 @@ new_home() {
     H="$(cd "$H" && pwd -P)"
 }
 cleanup() { [ -n "$H" ] && rm -rf "$H"; return 0; }
-trap cleanup EXIT
+trap cleanup_copy EXIT
 
 # run <args...>: install.sh output with the fake home; exit code in RC.
 run() {
+    case " $* " in *" --yes "*) echo "tests/run.sh: real runs use runc (a repo copy), not run" >&2; exit 1 ;; esac
     OUT="$(HOME="$H" /bin/bash "$REPO/install.sh" "$@" 2>&1)"
     RC=$?
 }
 
 pass() { PASS=$((PASS + 1)); printf '  ok    %s\n' "$1"; }
+
+# Real runs change the repo too (hook setting, --adopt), so they use a copy.
+C=""
+new_copy() {
+    [ -n "$C" ] && rm -rf "$C"
+    C="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-copy.XXXXXX")"; C="$(cd "$C" && pwd -P)"
+    cp -R "$REPO/." "$C/"
+    git -C "$C" config --unset core.hooksPath 2>/dev/null || true
+}
+# guard_real_run <args...>: a real run in a test may never reach packages (sudo, apt, brew).
+guard_real_run() {
+    case " $* " in *" --check "*|*" --dry-run "*|*" --report "*|*" --help "*) return 0 ;; esac
+    case " $* " in
+        *" --only vim "*|*" --only tmux "*|*" --only shell "*|*" --only git "*|*" --only task "*|\
+        *" --link-only "*|*" --restore"*|*" --adopt "*|*" --as "*) return 0 ;;
+    esac
+    case " $* " in *" --yes "*) ;; *) return 0 ;; esac    # without --yes it stops before changes
+    echo "tests/run.sh: refusing a real run that could install packages: install.sh $*" >&2
+    exit 1
+}
+# runc <args...>: install.sh from the copy, fake home, no plugin installs, no terminal input.
+runc() {
+    guard_real_run "$@"
+    OUT="$(HOME="$H" DOTFILES_TEST_NO_PLUGINS=1 /bin/bash "$C/install.sh" "$@" 2>&1 < /dev/null)"
+    RC=$?
+}
+# check_file <label> <test...>: a file check; leaves OUT (the last install.sh output) alone.
+check_file() {
+    local label="$1"; shift
+    if "$@"; then pass "$label"
+    else FAIL=$((FAIL + 1)); printf '  FAIL  %s\n          | file check failed: %s\n' "$label" "$*"; fi
+}
+cleanup_copy() { [ -n "$C" ] && rm -rf "$C"; cleanup; }
 fail() {
     FAIL=$((FAIL + 1)); printf '  FAIL  %s\n' "$1"
     printf '%s\n' "$OUT" | sed 's/^/          | /' | head -n 25
@@ -168,9 +206,11 @@ expect "link command" "\+ ln -s vim/vimrc ~/.vimrc"
 expect "clone command" "\+ git clone --depth 1 https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim"
 expect "plugin command" "\+ vim \+PluginInstall \+qall"
 expect "says nothing changed" "Nothing was changed"
-run --dry-run --only packages --platform debian
+new_copy
+printf 'git\ndotfiles-no-such-package\ntaskopen\n' > "$C/packages/common.txt"
+runc --dry-run --only packages --platform debian
 expect "debian: one sudo prompt" "\+ sudo -v"
-expect "debian: apt-get install, never asking" "\+ sudo env DEBIAN_FRONTEND=noninteractive .*NEEDRESTART_MODE=l .*apt-get install -y .* git$"
+expect "debian: apt-get install, never asking" "\+ sudo env DEBIAN_FRONTEND=noninteractive .*NEEDRESTART_MODE=l .*apt-get install -y .* dotfiles-no-such-package$"
 expect_not "debian: macOS-only package skipped" "apt-get install .* taskopen$"
 run --dry-run --only packages --platform macos
 expect "macOS: cask install" "\+ brew install --cask iterm2|ok    iterm2"
@@ -245,33 +285,13 @@ fi
 rm -rf "$FAKEBIN"
 
 # ---------------------------------------------------------------- write path
-# Real runs change the repo too (hook setting, --adopt), so they use a copy.
-
-C=""
-new_copy() {
-    [ -n "$C" ] && rm -rf "$C"
-    C="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-copy.XXXXXX")"; C="$(cd "$C" && pwd -P)"
-    cp -R "$REPO/." "$C/"
-    git -C "$C" config --unset core.hooksPath 2>/dev/null || true
-}
-# runc <args...>: install.sh from the copy, fake home, no plugin installs, no terminal input.
-runc() {
-    OUT="$(HOME="$H" DOTFILES_TEST_NO_PLUGINS=1 /bin/bash "$C/install.sh" "$@" 2>&1 < /dev/null)"
-    RC=$?
-}
-check_file() {  # check_file <label> <test expression...>
-    local label="$1"; shift
-    if "$@"; then pass "$label"; else OUT="(file check failed: $*)"; fail "$label"; fi
-}
-cleanup_copy() { [ -n "$C" ] && rm -rf "$C"; cleanup; }
-trap cleanup_copy EXIT
 
 echo
 echo "write path: link, stub, re-run, restore"
 new_home; new_copy
 cp "$C/vim/vimrc" "$H/.vimrc"
 printf '[pull]\n\tff = only\n' > "$H/.gitconfig"; cp "$H/.gitconfig" "$H/gitconfig.orig"
-runc --link-only --yes --profile base
+runc --link-only --yes --profile base --platform macos
 expect_rc "link-only run: exit 0" 0
 check_file "identical ~/.vimrc became a link" test -L "$H/.vimrc"
 check_file "~/.gitconfig starts with the stub" test "$(head -n 1 "$H/.gitconfig")" = "# >>> dotfiles >>>"
@@ -285,7 +305,7 @@ expect "summary names the undo command" "Undo this run: +./install.sh --restore"
 log="$(ls "$H"/.local/state/dotfiles/install-*.md | head -n 1)"
 check_file "a log was written" test -s "$log"
 check_file "the log is redacted" sh -c "! grep -qF '$H' '$log'"
-runc --link-only --yes
+runc --link-only --yes --platform macos
 expect_rc "re-run: exit 0" 0
 expect "re-run changes nothing" "Nothing needed changing"
 runc --restore --yes
@@ -365,14 +385,12 @@ expect_rc "adopt refuses a stub-managed file: exit 1" 1
 echo
 echo "write path: safety"
 new_home; new_copy
-if (exec < /dev/tty) 2>/dev/null; then
-    pass "no-terminal check skipped (running in a terminal)"
-else
-    runc --link-only --profile base
-    expect_rc "no --yes and no terminal: exit 1" 1
-    expect "stops before changing anything" "needs a terminal to confirm"
-    check_file "nothing was changed" test ! -e "$H/.vimrc"
-fi
+runc --link-only --profile base
+expect_rc "no --yes and no terminal: exit 1" 1
+expect "stops before changing anything" "needs a terminal to confirm"
+check_file "nothing was changed" test ! -e "$H/.vimrc"
+runc
+expect_rc "no mode, no profile, no terminal: exit 2 without asking" 2
 
 echo
 printf 'Result: %d passed, %d failed\n' "$PASS" "$FAIL"
