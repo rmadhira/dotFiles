@@ -421,6 +421,7 @@ show_packages() {
     done <<EOF
 $(package_lines)
 EOF
+    [ -z "${PKG_AFTER_NOTE:-}" ] || note "$PKG_AFTER_NOTE"
     CURRENT_ACTION=""
     return 0
 }

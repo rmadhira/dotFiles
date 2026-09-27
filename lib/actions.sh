@@ -87,15 +87,20 @@ done_item() { N_DONE=$((N_DONE + 1)); printf '  %-5s %s\n' done "$1"; }
 
 # run_cmd <command...>: show it, stream its output indented, stop the run on failure.
 run_cmd() {
-    local out rc line
-    cmd_line "$*"
+    local out rc line shown="$*" cr
+    cr="$(printf '\r')"
+    cmd_line "${shown//$HOME/~}"
     out="$STATE_DIR/.last-output.$$"
     set +e
-    "$@" < /dev/null 2>&1 | tee "$out" | while IFS= read -r line; do printf '          %s\n' "$line"; done
+    # Progress lines end in carriage returns; keep only what follows the last one.
+    "$@" < /dev/null 2>&1 | tee "$out" | while IFS= read -r line; do
+        line="${line##*"$cr"}"; line="${line//$HOME/~}"
+        printf '          %s\n' "$line"
+    done
     rc=${PIPESTATUS[0]}
     set -e
     if [ "$rc" -ne 0 ]; then
-        printf '%s' "$*" > "$ERR_FILE.cmd"
+        printf '%s' "${shown//$HOME/~}" > "$ERR_FILE.cmd"
         tail -n 20 "$out" > "$ERR_FILE.out" 2>/dev/null || true
     fi
     rm -f "$out"
@@ -104,7 +109,8 @@ run_cmd() {
 
 # run_interactive <command...>: for commands that talk to the terminal (sudo -v).
 run_interactive() {
-    cmd_line "$*"
+    local shown="$*"
+    cmd_line "${shown//$HOME/~}"
     "$@" < /dev/tty
 }
 

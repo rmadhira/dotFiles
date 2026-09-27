@@ -170,7 +170,7 @@ expect "plugin command" "\+ vim \+PluginInstall \+qall"
 expect "says nothing changed" "Nothing was changed"
 run --dry-run --only packages --platform debian
 expect "debian: one sudo prompt" "\+ sudo -v"
-expect "debian: apt-get install" "\+ sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get install -y .* git$"
+expect "debian: apt-get install, never asking" "\+ sudo env DEBIAN_FRONTEND=noninteractive .*NEEDRESTART_MODE=l .*apt-get install -y .* git$"
 expect_not "debian: macOS-only package skipped" "apt-get install .* taskopen$"
 run --dry-run --only packages --platform macos
 expect "macOS: cask install" "\+ brew install --cask iterm2|ok    iterm2"
@@ -303,6 +303,7 @@ runc --yes --profile base --only vim
 expect_rc "failing clone: exit 1" 1
 expect "failure block" "dotfiles: FAILED"
 expect "failure block names the command" "command   : git clone --depth 1 file:///nonexistent"
+expect "commands show ~, not the home path" "\+ git clone --depth 1 file:///nonexistent/dotfiles-test ~/.vim/bundle/Vundle.vim"
 expect "failure block shows its output" "last output:"
 log="$(ls "$H"/.local/state/dotfiles/install-*.md | head -n 1)"
 check_file "failure block is in the log" grep -q "dotfiles: FAILED" "$log"

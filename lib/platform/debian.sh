@@ -11,7 +11,9 @@ PKG_COLUMN=3    # apt column in packages/map.txt
 # apt must never stop to ask: no debconf dialogs (defaults are taken), needrestart
 # only lists services instead of asking or restarting them, and a config file I
 # changed is kept on upgrade. Found when needrestart's blue dialog took over server B.
-APT_GET="env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get"
+# NEEDRESTART_SUSPEND skips needrestart's report after every package; one note at
+# the end of the step points to "sudo needrestart" instead.
+APT_GET="env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l NEEDRESTART_SUSPEND=1 apt-get"
 APT_OPTS="-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
 
 _DPKG_LOADED=0
@@ -91,6 +93,9 @@ pkg_install() {
     fi
     # shellcheck disable=SC2086  # command and options are split into words on purpose
     run_cmd sudo $APT_GET install $APT_OPTS "$(pkg_name_for "$2")"
+    if command -v needrestart >/dev/null 2>&1; then
+        PKG_AFTER_NOTE="Some services may use updated libraries; 'sudo needrestart' lists any that need a restart."
+    fi
 }
 
 # sed_inplace <expression> <file>
