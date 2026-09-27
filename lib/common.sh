@@ -562,6 +562,29 @@ show_private() {
     fi
 }
 
+# show_git_identity: with user.useConfigOnly on (from git/gitconfig), git refuses to
+# commit without an identity. Say so before it surprises anyone.
+show_git_identity() {
+    local only email folders
+    wants git || return 0
+    # Asked from / so per-folder includeIf rules for the current directory do not count.
+    only="$(git -C / config --global --includes --get user.useConfigOnly 2>/dev/null || true)"
+    email="$(git -C / config --global --includes --get user.email 2>/dev/null || true)"
+    folders="$(git config --global --get-regexp '^includeif\.' 2>/dev/null | wc -l | tr -d ' ')"
+    if [ -n "$email" ]; then
+        item ok "git identity: a default is set in ~/.gitconfig"
+    elif [ "$folders" -gt 0 ]; then
+        item ok "git identity: set per folder ($(plural "$folders" "includeIf rule"))"
+    elif [ "$only" = true ]; then
+        item warn "git identity: none set, so git refuses to commit (user.useConfigOnly)"
+        if [ "$PROFILE" = personal ]; then note "the personal identities come with the private layer (phase 5)"
+        else note "set one: git config --global user.name \"...\"; git config --global user.email \"...\""; fi
+    else
+        item skip "git identity: none set (user.useConfigOnly not active yet)"
+    fi
+    return 0
+}
+
 show_hook() {
     if [ "$(git -C "$DOTFILES_DIR" config --get core.hooksPath 2>/dev/null || true)" = hooks ]; then
         item ok "pre-commit hook turned on for this clone"
@@ -622,7 +645,7 @@ mode_check() {
     section "Add-ons";        show_addons
     section "Managed files";  show_links all
     section "Plugins";        show_plugins
-    section "Private layer";  show_private
+    section "Private layer and git identity"; show_private; show_git_identity
     section "This clone";     show_hook
     summary
 }
@@ -642,7 +665,7 @@ mode_dry_run() {
     if [ "$LINK_ONLY" = 0 ]; then step 6 "Plugins"; show_plugins
     else step 6 "Plugins"; item skip "--link-only"; fi
     step 7 "Late links";          show_links late
-    step 8 "Private layer and git identities"; show_private
+    step 8 "Private layer and git identities"; show_private; show_git_identity
     step 9 "Finish";              show_hook
     [ "$READ_ONLY" = 1 ] || save_profile
     summary

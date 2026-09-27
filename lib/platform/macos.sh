@@ -97,8 +97,9 @@ pkg_install() {
         else cmd_line "brew install $brew_name"; fi
         return 0
     fi
-    if [ "$kind" = cask ]; then run_cmd "$BREW" install --cask "$brew_name"
-    else run_cmd "$BREW" install "$brew_name"; fi
+    # No hint paragraphs or emoji in the output (they arrived garbled when pasted).
+    if [ "$kind" = cask ]; then run_cmd env HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_EMOJI=1 "$BREW" install --cask "$brew_name"
+    else run_cmd env HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_EMOJI=1 "$BREW" install "$brew_name"; fi
 }
 
 # sed_inplace <expression> <file>

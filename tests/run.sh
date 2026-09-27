@@ -323,6 +323,26 @@ expect "restore again: clean message" "no run to restore"
 expect_not "restore again: no failure block" "FAILED"
 
 echo
+echo "git identity check"
+new_home
+run --check --only git
+expect "no stub yet: useConfigOnly not active" "skip  git identity: none set \(user.useConfigOnly not active yet\)"
+printf '[include]\n\tpath = %s/git/gitconfig\n' "$REPO" > "$H/.gitconfig"
+run --check --only git --profile office
+expect "stub, no identity: warns" "warn  git identity: none set, so git refuses to commit"
+expect "office: says how to set one" "git config --global user.email"
+run --check --only git --profile personal
+expect "personal: points to phase 5" "private layer \(phase 5\)"
+printf '[user]\n\temail = someone@users.noreply.github.com\n' >> "$H/.gitconfig"
+run --check --only git
+expect "default identity: ok" "ok    git identity: a default is set"
+printf '[include]\n\tpath = %s/git/gitconfig\n[includeIf "gitdir/i:~/projects/a/"]\n\tpath = ~/.gitconfig.a\n' "$REPO" > "$H/.gitconfig"
+mkdir -p "$H/projects/a"; git -C "$H/projects/a" init -q
+printf '[user]\n\temail = a@users.noreply.github.com\n' > "$H/.gitconfig.a"
+OUT="$(cd "$H/projects/a" && HOME="$H" /bin/bash "$REPO/install.sh" --check --only git 2>&1)"
+expect "per-folder identities: ok, even run inside such a folder" "ok    git identity: set per folder \(1 includeIf rule\)"
+
+echo
 echo "write path: logs and runs are found in time order"
 new_home; new_copy
 mkdir -p "$H/.local/state/dotfiles"
