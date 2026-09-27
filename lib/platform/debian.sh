@@ -8,6 +8,12 @@ PLATFORM_OS=linux
 # shellcheck disable=SC2034
 PKG_COLUMN=3    # apt column in packages/map.txt
 
+# apt must never stop to ask: no debconf dialogs (defaults are taken), needrestart
+# only lists services instead of asking or restarting them, and a config file I
+# changed is kept on upgrade. Found when needrestart's blue dialog took over server B.
+APT_GET="env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get"
+APT_OPTS="-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+
 _DPKG_LOADED=0
 _DPKG_OK=0
 _DPKG_INSTALLED=""
@@ -34,12 +40,13 @@ pkg_bootstrap() {
     if [ "$DRY_RUN" = 1 ]; then
         item todo "apt needs root: one password prompt, up front"
         cmd_line "sudo -v"
-        cmd_line "sudo apt-get update"
+        cmd_line "sudo $APT_GET update"
     elif [ "$READ_ONLY" = 0 ]; then
         CURRENT_ACTION="prepare apt"
         echo "        apt needs root: sudo asks for your password once, now."
         run_interactive sudo -v
-        run_cmd sudo apt-get update
+        # shellcheck disable=SC2086  # APT_GET is a command with words, split on purpose
+        run_cmd sudo $APT_GET update
         done_item "apt package lists updated"
     fi
     _dpkg_load
@@ -56,7 +63,8 @@ pkg_bootstrap() {
         run_cmd sudo mkdir -p /etc/apt/keyrings
         run_cmd sudo bash -c 'curl -fsSL https://repo.charm.sh/apt/gpg.key | gpg --dearmor -o /etc/apt/keyrings/charm.gpg'
         run_cmd sudo bash -c 'echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" > /etc/apt/sources.list.d/charm.list'
-        run_cmd sudo apt-get update
+        # shellcheck disable=SC2086
+        run_cmd sudo $APT_GET update
         record system "-" "added the charm.sh apt repo"
         done_item "glow source: charm.sh apt repo added"
     fi
@@ -78,10 +86,11 @@ pkg_installed() {
 # pkg_install <kind> <list name>: in a dry run, prints the command.
 pkg_install() {
     if [ "$READ_ONLY" = 1 ]; then
-        cmd_line "sudo apt-get install -y $(pkg_name_for "$2")"
+        cmd_line "sudo $APT_GET install $APT_OPTS $(pkg_name_for "$2")"
         return 0
     fi
-    run_cmd sudo apt-get install -y "$(pkg_name_for "$2")"
+    # shellcheck disable=SC2086  # command and options are split into words on purpose
+    run_cmd sudo $APT_GET install $APT_OPTS "$(pkg_name_for "$2")"
 }
 
 # sed_inplace <expression> <file>

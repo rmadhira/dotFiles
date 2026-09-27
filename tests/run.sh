@@ -170,8 +170,8 @@ expect "plugin command" "\+ vim \+PluginInstall \+qall"
 expect "says nothing changed" "Nothing was changed"
 run --dry-run --only packages --platform debian
 expect "debian: one sudo prompt" "\+ sudo -v"
-expect "debian: apt-get install" "\+ sudo apt-get install -y git"
-expect_not "debian: macOS-only package skipped" "apt-get install -y taskopen"
+expect "debian: apt-get install" "\+ sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get install -y .* git$"
+expect_not "debian: macOS-only package skipped" "apt-get install .* taskopen$"
 run --dry-run --only packages --platform macos
 expect "macOS: cask install" "\+ brew install --cask iterm2|ok    iterm2"
 
