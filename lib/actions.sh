@@ -317,22 +317,52 @@ install_vim_plugins() {
     if [ ! -d "$HOME/.vim/bundle/Vundle.vim" ]; then item warn "Vundle missing; vim plugins skipped"; return 0; fi
     # vim -E -s prints nothing, even on errors, and exits 1 on any error message.
     # -V1<file> writes vim's messages to a file, so a failure can show them.
-    local vlog="$STATE_DIR/.vim-plugins.$$.log" rc=0
-    rm -f "$vlog"
+    local vlog="$STATE_DIR/.vim-plugins.$$.log" ulog="$STATE_DIR/.vundle.$$.log" rc=0 still
+    rm -f "$vlog" "$ulog"
     # "filetype on" first, as the system vimrc would: -u skips it, and vimrc's
     # "filetype off" then raises E216 on vim 7.4 (CentOS 7), which fails the run.
-    run_cmd vim -E -s --cmd 'filetype on' -u "$DOTFILES_DIR/vim/vimrc" "-V1$vlog" +PluginInstall +qall || rc=$?
+    # After PluginInstall, Vundle's own log (each git command and its output) is
+    # written out, so a failed download can show why.
+    local shim="" path="$PATH"
+    if ! git_at_least 2 9; then
+        # Vundle always clones with --shallow-submodules (git 2.9+). On older git
+        # (CentOS 7: 1.8.3) every clone fails, so a stand-in git drops that one
+        # option for this vim run and passes everything else to the real git.
+        shim="$STATE_DIR/.git-shim.$$"
+        mkdir -p "$shim"
+        cat > "$shim/git" <<SHIM
+#!/bin/sh
+# Written by install.sh for one PluginInstall run; drops --shallow-submodules.
+n=\$#
+while [ "\$n" -gt 0 ]; do
+    a="\$1"; shift; n=\$((n - 1))
+    [ "\$a" = --shallow-submodules ] || set -- "\$@" "\$a"
+done
+exec "$(command -v git)" "\$@"
+SHIM
+        chmod +x "$shim/git"
+        path="$shim:$PATH"
+        note "git $(git --version | awk '{ print $3 }') lacks --shallow-submodules, which Vundle always passes; dropping it for this run"
+    fi
+    # PATH only for this call (a variable prefix on a function call is temporary in bash).
+    PATH="$path" run_cmd vim -E -s --cmd 'filetype on' -u "$DOTFILES_DIR/vim/vimrc" "-V1$vlog" +PluginInstall \
+        +"call writefile(get(g:, 'vundle#log', []), '$ulog')" +qall || rc=$?
+    [ -z "$shim" ] || rm -rf "$shim"
+    # vim 9 exits 0 even when a download failed, so check what is still missing.
+    still="$(plugin_missing vim)"
+    if [ -n "$still" ] && [ "$rc" = 0 ]; then rc=1; fi
     if [ "$rc" != 0 ]; then
         {
-            echo "vim messages (errors first):"
-            grep -E 'E[0-9]+:|[Ee]rror|[Ff]ailed' "$vlog" 2>/dev/null | tail -n 15
-            echo "last vim messages:"
-            grep -v '^[[:space:]]*$' "$vlog" 2>/dev/null | tail -n 10
+            [ -z "$still" ] || echo "still missing after PluginInstall: ${still% }"
+            echo "vim errors (E185, the colour scheme not installed yet, left out):"
+            grep -E 'E[0-9]+:|[Ee]rror|[Ff]ailed' "$vlog" 2>/dev/null | grep -v 'E185' | tail -n 10
+            echo "Vundle's log, last lines (git commands and their output):"
+            grep -v '^[[:space:]]*$' "$ulog" 2>/dev/null | tail -n 20
         } | while IFS= read -r line; do printf '          %s\n' "$(home_to_tilde "$line")"; done | tee -a "$ERR_FILE.out"
-        rm -f "$vlog"
+        rm -f "$vlog" "$ulog"
         return "$rc"
     fi
-    rm -f "$vlog"
+    rm -f "$vlog" "$ulog"
     done_item "vim plugins installed"
 }
 

@@ -73,7 +73,20 @@ check_file() {
     if "$@"; then pass "$label"
     else FAIL=$((FAIL + 1)); printf '  FAIL  %s\n          | file check failed: %s\n' "$label" "$*"; fi
 }
-cleanup_copy() { [ -n "$C" ] && rm -rf "$C"; cleanup; }
+cleanup_copy() { [ -n "$C" ] && rm -rf "$C"; [ -n "${FAKEGIT_DIR:-}" ] && rm -rf "$FAKEGIT_DIR"; cleanup; }
+
+# A fake git 1.8.3, as on CentOS 7: rejects -C and --shallow-submodules like the real one.
+FAKEGIT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-oldgit.XXXXXX")"
+cat > "$FAKEGIT_DIR/git" <<GIT
+#!/bin/sh
+[ "\$1" = --version ] && { echo "git version 1.8.3.1"; exit 0; }
+for a in "\$@"; do
+    [ "\$a" = -C ] && { echo "Unknown option: -C" >&2; exit 129; }
+    [ "\$a" = --shallow-submodules ] && { echo "error: unknown option shallow-submodules" >&2; exit 129; }
+done
+exec "$(command -v git)" "\$@"
+GIT
+chmod +x "$FAKEGIT_DIR/git"
 fail() {
     FAIL=$((FAIL + 1)); printf '  FAIL  %s\n' "$1"
     printf '%s\n' "$OUT" | sed 's/^/          | /' | head -n 25
@@ -225,6 +238,33 @@ VIM
     expect_not "with Vundle: a plugin behind a false guard is not expected" "never-declared"
 else
     pass "vim not installed; vim guard checks skipped"
+fi
+
+echo
+echo "vim plugins: a PluginInstall that downloads nothing is a failure"
+if command -v vim >/dev/null 2>&1; then
+    new_home; new_copy
+    # Stand-in Vundle whose PluginInstall does nothing, like a download that failed
+    # without vim reporting an error (vim 9 exits 0 then).
+    mkdir -p "$H/.vim/bundle/Vundle.vim/autoload" "$H/.vim/bundle/Vundle.vim/.git"
+    cat > "$H/.vim/bundle/Vundle.vim/autoload/vundle.vim" <<'VIM'
+let g:vundle#bundles = []
+let g:vundle#log = ['$ git clone --depth 1 --recursive --shallow-submodules ...', '> fatal: stand-in failure']
+function! vundle#begin(...) abort
+    command! -nargs=+ Plugin call add(g:vundle#bundles, {'name': split(eval(<q-args>), '/')[-1]})
+    command! PluginInstall echo ''
+endfunction
+function! vundle#end(...) abort
+endfunction
+VIM
+    guard_real_run --yes --profile base --only vim
+    OUT="$(HOME="$H" PATH="$FAKEGIT_DIR:$PATH" /bin/bash "$C/install.sh" --yes --profile base --only vim 2>&1 < /dev/null)"; RC=$?
+    expect_rc "plugins still missing: exit 1" 1
+    expect "names the plugins still missing" "still missing after PluginInstall: .*vim-atom-dark"
+    expect "shows Vundle's log" "fatal: stand-in failure"
+    expect "old git: explains the --shallow-submodules workaround" "lacks --shallow-submodules, which Vundle always passes"
+else
+    pass "vim not installed; PluginInstall checks skipped"
 fi
 
 echo
@@ -396,15 +436,7 @@ check_file "restore removes the saved answer" test ! -e "$H/.config/dotfiles/pac
 
 echo
 echo "old git (1.8.3, as on CentOS 7): no 'git -C', no core.hooksPath"
-FAKEGIT="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-oldgit.XXXXXX")"
-REALGIT="$(command -v git)"
-cat > "$FAKEGIT/git" <<GIT
-#!/bin/sh
-[ "\$1" = --version ] && { echo "git version 1.8.3.1"; exit 0; }
-[ "\$1" = -C ] && { echo "Unknown option: -C" >&2; exit 129; }
-exec "$REALGIT" "\$@"
-GIT
-chmod +x "$FAKEGIT/git"
+FAKEGIT="$FAKEGIT_DIR"
 new_home; new_copy
 for mode in --check --dry-run --report; do
     OUT="$(HOME="$H" PATH="$FAKEGIT:$PATH" /bin/bash "$C/install.sh" "$mode" --only vim 2>&1 < /dev/null)"; RC=$?
@@ -414,7 +446,6 @@ expect "old git: the hook is reported as unsupported" "pre-commit hook: needs gi
 OUT="$(HOME="$H" PATH="$FAKEGIT:$PATH" DOTFILES_TEST_NO_PLUGINS=1 /bin/bash "$C/install.sh" --link-only --yes --profile office --only git 2>&1 < /dev/null)"; RC=$?
 expect_rc "old git: a real run works" 0
 expect_not "old git: no -C error anywhere" "Unknown option: -C"
-rm -rf "$FAKEGIT"
 
 echo
 echo "write path: logs and runs are found in time order"

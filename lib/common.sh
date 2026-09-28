@@ -730,6 +730,8 @@ summary() {
     if [ -s "$MANIFEST" ]; then
         echo "Backup and manifest: $(tildify "$RUN_DIR")"
         echo "Undo this run:       ./install.sh --restore $RUN_ID"
+    elif [ "$N_DONE" -gt 0 ]; then
+        echo "Nothing to undo: this run only downloaded plugins."
     else
         echo "Nothing needed changing."
     fi
