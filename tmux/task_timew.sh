@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-# This requires taskwarrior and timewarrior installed on the system.
+# Shows the active Taskwarrior task and its Timewarrior time in the Dracula status bar.
+# Machines without timewarrior (the office container) show nothing.
+command -v timew >/dev/null 2>&1 || exit 0
 if timew get dom.active 2>/dev/null | grep -q 1; then
     task_name=$(timew | grep Tracking | cut -d'"' -f2)
     duration=$(timew | grep Total | awk '{print $2}')
