@@ -315,7 +315,24 @@ clone_addon() {
 install_vim_plugins() {
     if ! command -v vim >/dev/null 2>&1; then item warn "vim not found; vim plugins skipped"; return 0; fi
     if [ ! -d "$HOME/.vim/bundle/Vundle.vim" ]; then item warn "Vundle missing; vim plugins skipped"; return 0; fi
-    run_cmd vim -E -s -u "$DOTFILES_DIR/vim/vimrc" +PluginInstall +qall
+    # vim -E -s prints nothing, even on errors, and exits 1 on any error message.
+    # -V1<file> writes vim's messages to a file, so a failure can show them.
+    local vlog="$STATE_DIR/.vim-plugins.$$.log" rc=0
+    rm -f "$vlog"
+    # "filetype on" first, as the system vimrc would: -u skips it, and vimrc's
+    # "filetype off" then raises E216 on vim 7.4 (CentOS 7), which fails the run.
+    run_cmd vim -E -s --cmd 'filetype on' -u "$DOTFILES_DIR/vim/vimrc" "-V1$vlog" +PluginInstall +qall || rc=$?
+    if [ "$rc" != 0 ]; then
+        {
+            echo "vim messages (errors first):"
+            grep -E 'E[0-9]+:|[Ee]rror|[Ff]ailed' "$vlog" 2>/dev/null | tail -n 15
+            echo "last vim messages:"
+            grep -v '^[[:space:]]*$' "$vlog" 2>/dev/null | tail -n 10
+        } | while IFS= read -r line; do printf '          %s\n' "$(home_to_tilde "$line")"; done | tee -a "$ERR_FILE.out"
+        rm -f "$vlog"
+        return "$rc"
+    fi
+    rm -f "$vlog"
     done_item "vim plugins installed"
 }
 

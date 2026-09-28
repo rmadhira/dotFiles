@@ -444,7 +444,7 @@ vim_declared_plugins() {
     local out="${TMPDIR:-/tmp}/dotfiles-vimplugins.$$"
     rm -f "$out"
     if command -v vim >/dev/null 2>&1 && [ -f "$HOME/.vim/bundle/Vundle.vim/autoload/vundle.vim" ]; then
-        vim -E -s -N -n -i NONE -u "$DOTFILES_DIR/vim/vimrc" \
+        vim -E -s -N -n -i NONE --cmd 'filetype on' -u "$DOTFILES_DIR/vim/vimrc" \
             -c "call writefile(map(copy(g:vundle#bundles), 'v:val.name'), '$out')" -c 'qa!' \
             < /dev/null > /dev/null 2>&1 || true
     fi
