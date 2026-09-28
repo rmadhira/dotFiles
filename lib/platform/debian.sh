@@ -7,6 +7,8 @@
 PLATFORM_OS=linux
 # shellcheck disable=SC2034
 PKG_COLUMN=3    # apt column in packages/map.txt
+# shellcheck disable=SC2034
+PKG_MANAGER=apt
 
 # apt must never stop to ask: no debconf dialogs (defaults are taken), needrestart
 # only lists services instead of asking or restarting them, and a config file I

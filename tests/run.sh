@@ -39,6 +39,8 @@ run() {
 }
 
 pass() { PASS=$((PASS + 1)); printf '  ok    %s\n' "$1"; }
+# git_in <dir> <args...>: git inside a folder, for git older than 1.8.5 (CentOS 7).
+git_in() { local dir="$1"; shift; (cd "$dir" && git "$@"); }
 
 # Real runs change the repo too (hook setting, --adopt), so they use a copy.
 C=""
@@ -46,7 +48,7 @@ new_copy() {
     [ -n "$C" ] && rm -rf "$C"
     C="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-copy.XXXXXX")"; C="$(cd "$C" && pwd -P)"
     cp -R "$REPO/." "$C/"
-    git -C "$C" config --unset core.hooksPath 2>/dev/null || true
+    git_in "$C" config --unset core.hooksPath 2>/dev/null || true
 }
 # guard_real_run <args...>: a real run in a test may never reach packages (sudo, apt, brew).
 guard_real_run() {
@@ -186,10 +188,10 @@ new_home
 run --check --only vim;            expect "add-on missing" "todo  ~/.vim/bundle/Vundle.vim \(not cloned\)"
 mkdir -p "$H/.vim/bundle/Vundle.vim"
 run --check --only vim;            expect "add-on not a git clone" "warn  ~/.vim/bundle/Vundle.vim exists but is not a git clone"
-git -C "$H/.vim/bundle/Vundle.vim" init -q
-git -C "$H/.vim/bundle/Vundle.vim" remote add origin https://github.com/VundleVim/Vundle.vim
+git_in "$H/.vim/bundle/Vundle.vim" init -q
+git_in "$H/.vim/bundle/Vundle.vim" remote add origin https://github.com/VundleVim/Vundle.vim
 run --check --only vim;            expect "add-on from the declared URL" "ok    ~/.vim/bundle/Vundle.vim"
-git -C "$H/.vim/bundle/Vundle.vim" remote set-url origin https://example.com/other.git
+git_in "$H/.vim/bundle/Vundle.vim" remote set-url origin https://example.com/other.git
 run --check --only vim;            expect "add-on from another URL" "warn  ~/.vim/bundle/Vundle.vim cloned from https://example.com/other.git"
 
 echo
@@ -198,6 +200,32 @@ new_home
 run --check --only tmux;           expect "tmux plugins missing" "todo  tmux plugins missing: tpm vim-tmux-navigator tmux"
 mkdir -p "$H/.tmux/plugins/tpm" "$H/.tmux/plugins/vim-tmux-navigator" "$H/.tmux/plugins/tmux"
 run --check --only tmux;           expect "tmux plugins present" "ok    tmux plugins"
+
+echo
+echo "vim plugins: vim decides which apply here (guards in vimrc)"
+if command -v vim >/dev/null 2>&1; then
+    new_home; new_copy
+    # A copy of the vimrc with one more plugin behind a guard that is always false.
+    awk '/^call vundle#end\(\)/ { print "if 0"; print "    Plugin '"'"'x/never-declared'"'"'"; print "endif" } { print }' \
+        "$C/vim/vimrc" > "$C/vim/vimrc.new" && mv "$C/vim/vimrc.new" "$C/vim/vimrc"
+    runc --check --only vim
+    expect "no Vundle yet: every Plugin line counts" "vim plugins missing: .*never-declared"
+    # A minimal stand-in for Vundle, enough for vim to report what the vimrc declares.
+    mkdir -p "$H/.vim/bundle/Vundle.vim/autoload"
+    cat > "$H/.vim/bundle/Vundle.vim/autoload/vundle.vim" <<'VIM'
+let g:vundle#bundles = []
+function! vundle#begin(...) abort
+    command! -nargs=+ Plugin call add(g:vundle#bundles, {'name': split(eval(<q-args>), '/')[-1]})
+endfunction
+function! vundle#end(...) abort
+endfunction
+VIM
+    runc --check --only vim
+    expect "with Vundle: plugins still missing are listed" "vim plugins missing: .*vim-atom-dark"
+    expect_not "with Vundle: a plugin behind a false guard is not expected" "never-declared"
+else
+    pass "vim not installed; vim guard checks skipped"
+fi
 
 echo
 echo "dry run"
@@ -222,7 +250,7 @@ echo "a clone with the pre-commit hook off (like a fresh clone on another machin
 new_home
 CLONE="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-clone.XXXXXX")"
 cp -R "$REPO/." "$CLONE/"
-git -C "$CLONE" config --unset core.hooksPath 2>/dev/null || true
+git_in "$CLONE" config --unset core.hooksPath 2>/dev/null || true
 for mode in --check --report --dry-run; do
     OUT="$(HOME="$H" /bin/bash "$CLONE/install.sh" "$mode" --only vim 2>&1)"; RC=$?
     expect_rc "$mode: exit 0 with the hook off" 0
@@ -300,7 +328,7 @@ check_file "~/.gitconfig starts with the stub" test "$(head -n 1 "$H/.gitconfig"
 check_file "~/.gitconfig keeps its lines below" grep -q "ff = only" "$H/.gitconfig"
 check_file "~/.zshrc created with the stub" grep -q ">>> dotfiles >>>" "$H/.zshrc"
 check_file "profile saved" test "$(cat "$H/.config/dotfiles/profile")" = base
-check_file "hook turned on in the clone" test "$(git -C "$C" config --get core.hooksPath)" = hooks
+check_file "hook turned on in the clone" test "$(git_in "$C" config --get core.hooksPath)" = hooks
 expect "late link without its plugin folder: warns" "warn  ~/.tmux/plugins/tmux/scripts/task_timew.sh"
 check_file "late link did not create the plugin folder" test ! -e "$H/.tmux/plugins/tmux"
 expect "summary names the undo command" "Undo this run: +./install.sh --restore"
@@ -316,7 +344,7 @@ check_file "restore: ~/.gitconfig byte-identical" cmp -s "$H/.gitconfig" "$H/git
 check_file "restore: ~/.vimrc a regular file again" sh -c "[ -f '$H/.vimrc' ] && [ ! -L '$H/.vimrc' ]"
 check_file "restore: created ~/.zshrc removed" test ! -e "$H/.zshrc"
 check_file "restore: profile removed" test ! -e "$H/.config/dotfiles/profile"
-check_file "restore: hook setting back" test -z "$(git -C "$C" config --get core.hooksPath || true)"
+check_file "restore: hook setting back" test -z "$(git_in "$C" config --get core.hooksPath || true)"
 runc --restore --yes
 expect_rc "restore again: exit 1" 1
 expect "restore again: clean message" "no run to restore"
@@ -337,10 +365,56 @@ printf '[user]\n\temail = someone@users.noreply.github.com\n' >> "$H/.gitconfig"
 run --check --only git
 expect "default identity: ok" "ok    git identity: a default is set"
 printf '[include]\n\tpath = %s/git/gitconfig\n[includeIf "gitdir/i:~/projects/a/"]\n\tpath = ~/.gitconfig.a\n' "$REPO" > "$H/.gitconfig"
-mkdir -p "$H/projects/a"; git -C "$H/projects/a" init -q
+mkdir -p "$H/projects/a"; git_in "$H/projects/a" init -q
 printf '[user]\n\temail = a@users.noreply.github.com\n' > "$H/.gitconfig.a"
 OUT="$(cd "$H/projects/a" && HOME="$H" /bin/bash "$REPO/install.sh" --check --only git 2>&1)"
 expect "per-folder identities: ok, even run inside such a folder" "ok    git identity: set per folder \(1 includeIf rule\)"
+
+echo
+echo "packages: whether this machine installs them"
+new_home; new_copy
+printf 'git\ndotfiles-no-such-package\n' > "$C/packages/common.txt"
+runc --check --only packages --platform linux
+expect "generic Linux: uses what is installed" "packages : use what is installed \(no supported package manager"
+expect "generic Linux: tools found by command" "ok    git"
+expect "generic Linux: a missing tool is skipped, not todo" "skip  dotfiles-no-such-package \(not installed; package installs are off here\)"
+runc --dry-run --only packages --platform linux
+expect_not "generic Linux: dry run installs nothing" "brew install|apt-get install"
+runc --dry-run --only packages --platform debian --no-packages
+expect "--no-packages: step 2 is off" "skip  package installs: off \(from --no-packages\)"
+expect_not "--no-packages: no apt-get" "apt-get"
+mkdir -p "$H/.config/dotfiles"; echo no > "$H/.config/dotfiles/packages"
+runc --dry-run --only packages --platform debian
+expect "saved 'no' is used" "packages : use what is installed \(saved"
+runc --dry-run --only packages --platform debian --packages
+expect "--packages wins over the saved answer" "apt-get install .* dotfiles-no-such-package"
+rm -f "$H/.config/dotfiles/packages"
+runc --link-only --yes --profile base --only vim --no-packages
+check_file "a --no-packages real run saves the answer" test "$(cat "$H/.config/dotfiles/packages")" = no
+runc --restore --yes
+check_file "restore removes the saved answer" test ! -e "$H/.config/dotfiles/packages"
+
+echo
+echo "old git (1.8.3, as on CentOS 7): no 'git -C', no core.hooksPath"
+FAKEGIT="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-oldgit.XXXXXX")"
+REALGIT="$(command -v git)"
+cat > "$FAKEGIT/git" <<GIT
+#!/bin/sh
+[ "\$1" = --version ] && { echo "git version 1.8.3.1"; exit 0; }
+[ "\$1" = -C ] && { echo "Unknown option: -C" >&2; exit 129; }
+exec "$REALGIT" "\$@"
+GIT
+chmod +x "$FAKEGIT/git"
+new_home; new_copy
+for mode in --check --dry-run --report; do
+    OUT="$(HOME="$H" PATH="$FAKEGIT:$PATH" /bin/bash "$C/install.sh" "$mode" --only vim 2>&1 < /dev/null)"; RC=$?
+    expect_rc "old git: $mode exit 0" 0
+done
+expect "old git: the hook is reported as unsupported" "pre-commit hook: needs git 2.9 or newer \(this is 1.8.3.1\)"
+OUT="$(HOME="$H" PATH="$FAKEGIT:$PATH" DOTFILES_TEST_NO_PLUGINS=1 /bin/bash "$C/install.sh" --link-only --yes --profile office --only git 2>&1 < /dev/null)"; RC=$?
+expect_rc "old git: a real run works" 0
+expect_not "old git: no -C error anywhere" "Unknown option: -C"
+rm -rf "$FAKEGIT"
 
 echo
 echo "write path: logs and runs are found in time order"
@@ -382,7 +456,7 @@ echo
 echo "write path: add-ons"
 new_home; new_copy
 ADDON="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-addon.XXXXXX")"
-git -C "$ADDON" init -q && git -C "$ADDON" -c user.name=t -c user.email=t@users.noreply.github.com commit -q --allow-empty -m init
+git_in "$ADDON" init -q && git_in "$ADDON" -c user.name=t -c user.email=t@users.noreply.github.com commit -q --allow-empty -m init
 printf 'vim  file://%s  ~/.vim/bundle/Vundle.vim\n' "$ADDON" > "$C/addons.txt"
 runc --yes --profile base --only vim
 expect_rc "install --only vim: exit 0" 0

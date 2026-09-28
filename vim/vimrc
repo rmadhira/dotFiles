@@ -22,14 +22,18 @@ Plugin 'VundleVim/Vundle.vim'
 " tmux vim navigator                                                               
 Plugin 'christoomey/vim-tmux-navigator'                                            
                                                                                    
-" Asynchronous Lint Engine                                                         
-Plugin 'dense-analysis/ale'                                                        
+" Asynchronous Lint Engine: needs Vim 8 (it errors at every start on older vim)
+if v:version >= 800
+    Plugin 'dense-analysis/ale'
+endif
                                                                                    
 " Python PEP8                                                                      
 Plugin 'nvie/vim-flake8'                                                           
                                                                                    
-" Python autocompletion                                                            
-Plugin 'davidhalter/jedi-vim'                                                      
+" Python autocompletion: needs a vim built with Python 3
+if has('python3')
+    Plugin 'davidhalter/jedi-vim'
+endif
                                                                                    
 " Color scheme
 Plugin 'gosukiwi/vim-atom-dark'

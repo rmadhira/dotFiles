@@ -1,8 +1,13 @@
-# Package names that differ by platform. A list name not here is used as-is.
-# "-" skips the package on that platform.
-# list name        brew             apt
-taskwarrior        task             taskwarrior
-curl               -                curl            # macOS ships curl
-gh                 gh               -               # macOS only for now
-taskwarrior-tui    taskwarrior-tui  -               # not in Ubuntu apt
-taskopen           taskopen         -               # not in Ubuntu apt (22.04, 26.04)
+# Package names that differ by platform. A list name not here is used as-is in
+# every column. "-" skips the package on that platform.
+# The command column is what proves a tool is installed on a Linux without a
+# supported package manager (the generic platform); "a|b" means either one.
+# list name        brew             apt              command
+taskwarrior        task             taskwarrior      task
+timewarrior        timewarrior      timewarrior      timew
+ripgrep            ripgrep          ripgrep          rg
+bat                bat              bat              bat|batcat
+curl               -                curl             curl            # macOS ships curl
+gh                 gh               -                gh              # apt: macOS only for now
+taskwarrior-tui    taskwarrior-tui  -                taskwarrior-tui # not in Ubuntu apt
+taskopen           taskopen         -                taskopen        # not in Ubuntu apt (22.04, 26.04)

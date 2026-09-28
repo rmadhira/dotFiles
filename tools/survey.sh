@@ -35,7 +35,7 @@ yesno()   { if "$@" >/dev/null 2>&1; then echo yes; else echo no; fi; }
 
 survey_common() {
     section "survey"
-    echo "script   : tools/survey.sh ($(git -C "$(dirname "$0")" rev-parse --short HEAD 2>/dev/null || echo 'no git'))"
+    echo "script   : tools/survey.sh ($(cd "$(dirname "$0")" && git rev-parse --short HEAD 2>/dev/null || echo 'no git'))"
     echo "date     : $(date '+%Y-%m-%d %H:%M %Z')"
 
     section "system"

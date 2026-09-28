@@ -7,6 +7,8 @@
 PLATFORM_OS=macos
 # shellcheck disable=SC2034
 PKG_COLUMN=2    # brew column in packages/map.txt
+# shellcheck disable=SC2034
+PKG_MANAGER=brew
 
 BREW=""
 for _b in /opt/homebrew/bin/brew /usr/local/bin/brew; do

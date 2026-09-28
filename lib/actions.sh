@@ -224,7 +224,7 @@ make_link() {
     record linked "$(rel_of "$2")" "$DOTFILES_DIR/$1"
 }
 
-repo_file_dirty() { [ -n "$(git -C "$DOTFILES_DIR" status --porcelain -- "$1" 2>/dev/null)" ]; }
+repo_file_dirty() { [ -n "$(git_in "$DOTFILES_DIR" status --porcelain -- "$1" 2>/dev/null)" ]; }
 
 # resolve_differs <repo path> <live path>: the keep repo / take live / merge / skip question.
 resolve_differs() {
@@ -337,8 +337,8 @@ install_tmux_plugins() {
 
 enable_hook() {
     local prev
-    prev="$(git -C "$DOTFILES_DIR" config --get core.hooksPath 2>/dev/null || true)"
-    git -C "$DOTFILES_DIR" config core.hooksPath hooks
+    prev="$(git_in "$DOTFILES_DIR" config --get core.hooksPath 2>/dev/null || true)"
+    git_in "$DOTFILES_DIR" config core.hooksPath hooks
     record hook "-" "${prev:-none}"
     done_item "pre-commit hook turned on for this clone"
 }
@@ -351,6 +351,18 @@ save_profile() {
     printf '%s\n' "$PROFILE" > "$CONFIG_DIR/profile"
     record profile "-" "$prev"
     done_item "profile '$PROFILE' saved in ~/.config/dotfiles/profile"
+}
+
+# save_packages_mode: remember an answer or a --packages/--no-packages flag.
+save_packages_mode() {
+    local prev=none
+    [ "$PKG_ASKED" = 1 ] || [ -n "$PKG_FLAG" ] || return 0
+    [ -r "$CONFIG_DIR/packages" ] && read -r prev < "$CONFIG_DIR/packages"
+    [ "$prev" = "$PKG_MODE" ] && return 0
+    mkdir -p "$CONFIG_DIR"
+    printf '%s\n' "$PKG_MODE" > "$CONFIG_DIR/packages"
+    record packages "-" "$prev"
+    done_item "package installs '$PKG_MODE' saved in ~/.config/dotfiles/packages"
 }
 
 # ---------------------------------------------------------------- restore
@@ -408,13 +420,17 @@ mode_restore() {
                     done_item "$(tildify "$path") moved to $(tildify "$tmpdir/$rel")"
                 fi ;;
             hook)
-                if [ "$extra" = none ]; then git -C "$DOTFILES_DIR" config --unset core.hooksPath || true
-                else git -C "$DOTFILES_DIR" config core.hooksPath "$extra"; fi
+                if [ "$extra" = none ]; then git_in "$DOTFILES_DIR" config --unset core.hooksPath || true
+                else git_in "$DOTFILES_DIR" config core.hooksPath "$extra"; fi
                 done_item "pre-commit hook setting restored" ;;
             profile)
                 if [ "$extra" = none ]; then rm -f "$CONFIG_DIR/profile"
                 else printf '%s\n' "$extra" > "$CONFIG_DIR/profile"; fi
                 done_item "profile setting restored" ;;
+            packages)
+                if [ "$extra" = none ]; then rm -f "$CONFIG_DIR/packages"
+                else printf '%s\n' "$extra" > "$CONFIG_DIR/packages"; fi
+                done_item "package-install setting restored" ;;
             installed)
                 item skip "package $rel stays installed (remove it by hand if unwanted)" ;;
             copied|took-live|adopted|moved-aside) ;;
@@ -482,7 +498,7 @@ mode_update_addons() {
         wants "$comp" || continue
         live="$(expand_home "$dest")"
         if [ "$(addon_state "$url" "$live")" = "ok|" ]; then
-            run_cmd git -C "$live" pull --ff-only
+            run_cmd git_in "$live" pull --ff-only
             done_item "$(tildify "$live") updated"
         else
             item skip "$(tildify "$live") (not a clone of $url)"
@@ -494,8 +510,8 @@ EOF
 
 mode_uninstall_hooks() {
     section "Pre-commit hook"
-    if [ -n "$(git -C "$DOTFILES_DIR" config --get core.hooksPath 2>/dev/null || true)" ]; then
-        git -C "$DOTFILES_DIR" config --unset core.hooksPath
+    if [ -n "$(git_in "$DOTFILES_DIR" config --get core.hooksPath 2>/dev/null || true)" ]; then
+        git_in "$DOTFILES_DIR" config --unset core.hooksPath
         done_item "pre-commit hook turned off for this clone"
     else
         item ok "pre-commit hook was not turned on"

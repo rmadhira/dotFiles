@@ -17,6 +17,10 @@ ADOPT_PATH=""
 ADOPT_AS=""
 RESTORE_ID=""
 LINK_ONLY=0
+PKG_FLAG=""          # yes | no, from --packages / --no-packages
+PKG_MODE=""          # yes | no | ask: will this run install packages?
+PKG_NOTE=""
+PKG_ASKED=0
 PROFILE=""
 PROFILE_NOTE=""
 ONLY=""
@@ -102,7 +106,9 @@ Options:
   --profile base|personal|office   default: saved profile; a real run asks
   --only packages|vim|tmux|shell|git|task|private
   --yes                  no questions: confirm, and keep the repo version
-  --platform macos|debian          override detection (for testing)
+  --packages             install missing packages (remembered for this machine)
+  --no-packages          never install packages here; use what is installed (remembered)
+  --platform macos|debian|linux    override detection (for testing)
   --verbose                        write a line-by-line trace to a temp file
   -h, --help
 
@@ -190,6 +196,8 @@ parse_args() {
             --platform=*) PLATFORM="${1#*=}" ;;
             --verbose)  VERBOSE=1 ;;
             --yes)      ASSUME_YES=1 ;;
+            --packages)    PKG_FLAG=yes ;;
+            --no-packages) PKG_FLAG=no ;;
             --link-only|--update-addons|--uninstall-hooks)
                 [ -n "$MODE" ] && die_usage "choose one mode: $MODE or ${1#--}"
                 MODE="${1#--}" ;;
@@ -217,7 +225,7 @@ parse_args() {
             *) die_usage "unknown component for --only: $ONLY (one of: $COMPONENTS)" ;;
         esac
     fi
-    case "$PLATFORM" in ""|macos|debian) ;; *) die_usage "unknown platform: $PLATFORM" ;; esac
+    case "$PLATFORM" in ""|macos|debian|linux) ;; *) die_usage "unknown platform: $PLATFORM" ;; esac
     [ "$MODE" = dry-run ] && DRY_RUN=1
     return 0
 }
@@ -236,7 +244,9 @@ detect_platform() {
                 case " $id $id_like " in
                     *" debian "*|*" ubuntu "*) PLATFORM=debian ;;
                 esac
-            fi ;;
+            fi
+            # Any other Linux: no package manager support, tools already installed are used.
+            [ -n "$PLATFORM" ] || PLATFORM=linux ;;
     esac
     if [ -z "$PLATFORM" ]; then
         echo "install.sh: unsupported platform: $(uname -s) ${id:-} ${id_like:-}" >&2
@@ -284,21 +294,73 @@ platform_line() {
     # shellcheck source=/dev/null
     case "$PLATFORM" in
         macos)  release="macOS $(sw_vers -productVersion 2>/dev/null || echo '?')" ;;
-        debian) release="$( (. /etc/os-release 2>/dev/null && printf '%s' "${PRETTY_NAME:-}") || true)" ;;
+        debian|linux) release="$(os_release_name)" ;;
     esac
     printf '%s | %s | %s | bash %s\n' "$PLATFORM" "${release:-unknown release}" "$(uname -m)" "${BASH_VERSION%%(*}"
 }
 
+# os_release_name: "CentOS Linux 7 (Core)", or the kernel name without /etc/os-release.
+os_release_name() {
+    local n=""
+    # shellcheck source=/dev/null
+    [ -r /etc/os-release ] && n="$( (. /etc/os-release && printf '%s' "${PRETTY_NAME:-}") || true)"
+    printf '%s\n' "${n:-$(uname -s)}"
+}
+
+# resolve_packages_mode: will this run install missing packages? Sets PKG_MODE
+# (yes | no | ask) and PKG_NOTE. A machine without sudo uses what is installed.
+resolve_packages_mode() {
+    local saved=""
+    [ -r "$CONFIG_DIR/packages" ] && read -r saved < "$CONFIG_DIR/packages"
+    if [ -n "$PKG_FLAG" ]; then
+        PKG_MODE="$PKG_FLAG"
+        if [ "$PKG_FLAG" = yes ]; then PKG_NOTE="from --packages"; else PKG_NOTE="from --no-packages"; fi
+    elif [ "$PKG_MANAGER" = none ]; then
+        PKG_MODE=no; PKG_NOTE="no supported package manager on $(os_release_name)"
+    elif [ "$saved" = yes ] || [ "$saved" = no ]; then
+        PKG_MODE="$saved"; PKG_NOTE="saved in ~/.config/dotfiles/packages"
+    elif [ "$PKG_MANAGER" = brew ]; then
+        PKG_MODE=yes; PKG_NOTE="Homebrew installs as this user"
+    elif ! command -v sudo >/dev/null 2>&1; then
+        PKG_MODE=no; PKG_NOTE="no sudo on this machine"
+    elif sudo -n true 2>/dev/null; then
+        PKG_MODE=yes; PKG_NOTE="sudo works here"
+    elif [ "$READ_ONLY" = 1 ]; then
+        PKG_MODE=ask; PKG_NOTE="a real run asks whether sudo can be used"
+    elif [ "$ASSUME_YES" = 1 ] || ! has_tty; then
+        PKG_MODE=no; PKG_NOTE="sudo needs a password and nobody can be asked; add --packages to install"
+    else
+        printf '\nCan this run use sudo to install packages?\n[y]es, install what is missing / [n]o, use what is already installed: ' > /dev/tty
+        read -r saved < /dev/tty || saved=""
+        case "$saved" in y|Y|yes) PKG_MODE=yes ;; *) PKG_MODE=no ;; esac
+        PKG_NOTE="answered now; saved at the end of the run"; PKG_ASKED=1
+    fi
+    return 0
+}
+
 repo_line() {
     local branch commit state
-    branch="$(git -C "$DOTFILES_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
-    commit="$(git -C "$DOTFILES_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
-    if [ -z "$(git -C "$DOTFILES_DIR" status --porcelain 2>/dev/null)" ]; then state=clean
+    branch="$(git_in "$DOTFILES_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+    commit="$(git_in "$DOTFILES_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
+    if [ -z "$(git_in "$DOTFILES_DIR" status --porcelain 2>/dev/null)" ]; then state=clean
     else state="uncommitted changes"; fi
     printf '%s | %s @ %s | %s\n' "$(tildify "$DOTFILES_DIR")" "$branch" "$commit" "$state"
 }
 
 wants() { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
+
+# git_in <dir> <git args...>: git run inside a folder. "git -C" needs git 1.8.5;
+# CentOS 7 ships 1.8.3, so this works everywhere.
+git_in() { local dir="$1"; shift; (cd "$dir" && git "$@"); }
+
+# git_at_least <major> <minor>: is the installed git at least that version?
+git_at_least() {
+    local v maj min
+    v="$(git --version 2>/dev/null | awk '{ print $3 }')"
+    maj="${v%%.*}"; v="${v#*.}"; min="${v%%.*}"
+    case "$maj$min" in *[!0-9]*|"") return 1 ;; esac
+    [ "$maj" -gt "$1" ] || { [ "$maj" -eq "$1" ] && [ "$min" -ge "$2" ]; }
+}
 
 # bashrc_loads_aliases: does ~/.bashrc load ~/.bash_aliases (Ubuntu's default does)?
 bashrc_loads_aliases() { [ -f "$HOME/.bashrc" ] && grep -q '\.bash_aliases' "$HOME/.bashrc"; }
@@ -369,19 +431,39 @@ addon_state() {
     local url="$1" dest="$2" remote
     if [ ! -e "$dest" ]; then echo "missing|"; return 0; fi
     if [ ! -d "$dest/.git" ]; then echo "conflict|exists but is not a git clone"; return 0; fi
-    remote="$(git -C "$dest" config --get remote.origin.url 2>/dev/null || true)"
+    remote="$(git_in "$dest" config --get remote.origin.url 2>/dev/null || true)"
     if [ "$(normalize_url "$remote")" = "$(normalize_url "$url")" ]; then echo "ok|"
     else echo "conflict|cloned from ${remote:-an unknown remote}"; fi
 }
 normalize_url() { local u="${1%/}"; printf '%s\n' "${u%.git}"; }
+
+# vim_declared_plugins: plugin folder names the vimrc declares on this machine.
+# vimrc loads some plugins only on a new enough vim, so vim itself is asked; the
+# file is read instead (every Plugin line) until Vundle is there to answer.
+vim_declared_plugins() {
+    local out="${TMPDIR:-/tmp}/dotfiles-vimplugins.$$"
+    rm -f "$out"
+    if command -v vim >/dev/null 2>&1 && [ -f "$HOME/.vim/bundle/Vundle.vim/autoload/vundle.vim" ]; then
+        vim -E -s -N -n -i NONE -u "$DOTFILES_DIR/vim/vimrc" \
+            -c "call writefile(map(copy(g:vundle#bundles), 'v:val.name'), '$out')" -c 'qa!' \
+            < /dev/null > /dev/null 2>&1 || true
+    fi
+    if [ -s "$out" ]; then
+        cat "$out"
+    else
+        sed -n "s/^[[:space:]]*Plugin '\([^']*\)'.*/\1/p" "$DOTFILES_DIR/vim/vimrc" | sed 's#.*/##'
+    fi
+    rm -f "$out"
+    return 0
+}
 
 # plugin_missing <component>: names of declared plugins not yet installed.
 plugin_missing() {
     local name
     case "$1" in
         vim)
-            sed -n "s/^Plugin '\([^']*\)'.*/\1/p" "$DOTFILES_DIR/vim/vimrc" | while read -r name; do
-                [ -d "$HOME/.vim/bundle/${name##*/}" ] || printf '%s ' "${name##*/}"
+            vim_declared_plugins | while read -r name; do
+                [ -d "$HOME/.vim/bundle/$name" ] || printf '%s ' "$name"
             done ;;
         tmux)
             sed -n "s/^set -g @plugin '\([^']*\)'.*/\1/p" "$DOTFILES_DIR/tmux/tmux.conf" | while read -r name; do
@@ -408,7 +490,9 @@ show_packages() {
             outside) item ok "$name (installed outside Homebrew, left as is)" ;;
             skip)    item skip "$name (not for this platform)" ;;
             unknown|missing)
-                if [ "$READ_ONLY" = 1 ]; then
+                if [ "$PKG_MODE" = no ]; then
+                    item skip "$name (not installed; package installs are off here)"
+                elif [ "$READ_ONLY" = 1 ]; then
                     if [ "$state" = unknown ]; then item todo "$name (cannot query packages here)"; else item todo "$name"; fi
                     [ "$DRY_RUN" = 1 ] && pkg_install "$kind" "$name"
                 else
@@ -553,6 +637,15 @@ show_plugins() {
     return 0
 }
 
+# show_bootstrap: step 2, unless this machine does not install packages.
+show_bootstrap() {
+    if [ "$PKG_MODE" = no ] && [ "$PKG_MANAGER" != none ]; then
+        item skip "package installs: off ($PKG_NOTE)"
+        return 0
+    fi
+    pkg_bootstrap
+}
+
 show_private() {
     if ! wants private && ! wants git; then return 0; fi
     if [ "$PROFILE" = personal ]; then
@@ -568,8 +661,8 @@ show_git_identity() {
     local only email folders
     wants git || return 0
     # Asked from / so per-folder includeIf rules for the current directory do not count.
-    only="$(git -C / config --global --includes --get user.useConfigOnly 2>/dev/null || true)"
-    email="$(git -C / config --global --includes --get user.email 2>/dev/null || true)"
+    only="$(git_in / config --global --includes --get user.useConfigOnly 2>/dev/null || true)"
+    email="$(git_in / config --global --includes --get user.email 2>/dev/null || true)"
     folders="$(git config --global --get-regexp '^includeif\.' 2>/dev/null | wc -l | tr -d ' ')"
     if [ -n "$email" ]; then
         item ok "git identity: a default is set in ~/.gitconfig"
@@ -586,12 +679,16 @@ show_git_identity() {
 }
 
 show_hook() {
-    if [ "$(git -C "$DOTFILES_DIR" config --get core.hooksPath 2>/dev/null || true)" = hooks ]; then
+    if ! git_at_least 2 9; then
+        item skip "pre-commit hook: needs git 2.9 or newer (this is $(git --version 2>/dev/null | awk '{ print $3 }')); not used here"
+        return 0
+    fi
+    if [ "$(git_in "$DOTFILES_DIR" config --get core.hooksPath 2>/dev/null || true)" = hooks ]; then
         item ok "pre-commit hook turned on for this clone"
     else
         if [ "$READ_ONLY" = 1 ]; then
             item todo "pre-commit hook not turned on for this clone"
-            [ "$DRY_RUN" = 1 ] && cmd_line "git -C $(tildify "$DOTFILES_DIR") config core.hooksPath hooks"
+            [ "$DRY_RUN" = 1 ] && cmd_line "cd $(tildify "$DOTFILES_DIR") && git config core.hooksPath hooks"
         else
             enable_hook
         fi
@@ -605,6 +702,13 @@ preflight() {
     echo "dotfiles install.sh --$MODE"
     echo "  platform : $(platform_line)"
     echo "  profile  : $PROFILE ($PROFILE_NOTE)"
+    if [ -n "$PKG_MODE" ] && [ "$LINK_ONLY" = 0 ]; then
+        # (a case inside $( ) trips a bash 3.2 parser bug, so the text is picked first)
+        local what="install missing"
+        [ "$PKG_MODE" = no ] && what="use what is installed"
+        [ "$PKG_MODE" = ask ] && what="to be asked"
+        echo "  packages : $what ($PKG_NOTE)"
+    fi
     echo "  repo     : $(repo_line)"
     echo "  selected : ${ONLY:-all components}"
 }
@@ -639,7 +743,7 @@ summary() {
 mode_check() {
     preflight
     if wants packages; then
-        section "Package manager"; pkg_bootstrap
+        section "Package manager"; show_bootstrap
         section "Packages";        show_packages
     fi
     section "Add-ons";        show_addons
@@ -653,7 +757,7 @@ mode_check() {
 mode_dry_run() {
     step 1 "Preflight"; preflight | sed 's/^/  /'; check_subshell_failure
     if wants packages && [ "$LINK_ONLY" = 0 ]; then
-        step 2 "Package manager"; pkg_bootstrap
+        step 2 "Package manager"; show_bootstrap
         step 3 "Packages";        show_packages
     else
         step 2 "Package manager"; item skip "not selected"
@@ -667,7 +771,7 @@ mode_dry_run() {
     step 7 "Late links";          show_links late
     step 8 "Private layer and git identities"; show_private; show_git_identity
     step 9 "Finish";              show_hook
-    [ "$READ_ONLY" = 1 ] || save_profile
+    [ "$READ_ONLY" = 1 ] || { save_profile; save_packages_mode; }
     summary
 }
 
@@ -718,6 +822,7 @@ main() {
     # shellcheck source=/dev/null
     . "$DOTFILES_DIR/lib/platform/$PLATFORM.sh"
     resolve_profile
+    case "$MODE" in check|dry-run|report|install|link-only) resolve_packages_mode ;; esac
 
     if [ "$VERBOSE" = 1 ]; then
         TRACE_FILE="${TMPDIR:-/tmp}/dotfiles-trace.$(date +%Y%m%d-%H%M%S).log"
