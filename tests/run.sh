@@ -263,6 +263,23 @@ VIM
     expect "names the plugins still missing" "still missing after PluginInstall: .*vim-atom-dark"
     expect "shows Vundle's log" "fatal: stand-in failure"
     expect "old git: explains the --shallow-submodules workaround" "lacks --shallow-submodules, which Vundle always passes"
+
+    # vim exits 1 (as vim 7.4 does for errors silent! hid), but every plugin arrived:
+    # the step succeeds; a real vimrc error is shown as a warning.
+    cat > "$H/.vim/bundle/Vundle.vim/autoload/vundle.vim" <<'VIM'
+let g:vundle#bundles = []
+function! vundle#begin(...) abort
+    command! -nargs=+ Plugin call add(g:vundle#bundles, {'name': split(eval(<q-args>), '/')[-1]})
+    command! PluginInstall for b in g:vundle#bundles | call mkdir($HOME . '/.vim/bundle/' . b.name, 'p') | endfor | call NoSuchFunctionForTest()
+endfunction
+function! vundle#end(...) abort
+endfunction
+VIM
+    OUT="$(HOME="$H" /bin/bash "$C/install.sh" --yes --profile base --only vim 2>&1 < /dev/null)"; RC=$?
+    expect_rc "vim exits 1 but every plugin arrived: exit 0" 0
+    expect "the step is done" "done  vim plugins installed"
+    expect "a real vim error is shown as a warning" "warn  vim plugins installed, but vim reported errors"
+    expect "the warning names the error" "E117"
 else
     pass "vim not installed; PluginInstall checks skipped"
 fi

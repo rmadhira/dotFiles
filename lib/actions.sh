@@ -348,9 +348,21 @@ SHIM
     PATH="$path" run_cmd vim -E -s --cmd 'filetype on' -u "$DOTFILES_DIR/vim/vimrc" "-V1$vlog" +PluginInstall \
         +"call writefile(get(g:, 'vundle#log', []), '$ulog')" +qall || rc=$?
     [ -z "$shim" ] || rm -rf "$shim"
-    # vim 9 exits 0 even when a download failed, so check what is still missing.
+    # vim's exit code is not the verdict: vim 9 exits 0 even when a download failed,
+    # and vim 7.4 exits 1 for errors that silent! hid (E185, the colour scheme that
+    # is not installed yet when vimrc loads). What counts is what is installed now.
     still="$(plugin_missing vim)"
-    if [ -n "$still" ] && [ "$rc" = 0 ]; then rc=1; fi
+    if [ -z "$still" ]; then
+        if [ "$rc" != 0 ] && grep -E 'E[0-9]+:' "$vlog" 2>/dev/null | grep -qv 'E185'; then
+            item warn "vim plugins installed, but vim reported errors while loading vimrc:"
+            grep -E 'E[0-9]+:' "$vlog" | grep -v 'E185' | tail -n 5 | while IFS= read -r line; do
+                note "  $(home_to_tilde "$line")"
+            done
+        fi
+        rc=0
+    elif [ "$rc" = 0 ]; then
+        rc=1
+    fi
     if [ "$rc" != 0 ]; then
         {
             [ -z "$still" ] || echo "still missing after PluginInstall: ${still% }"
