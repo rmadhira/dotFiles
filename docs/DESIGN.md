@@ -63,26 +63,28 @@ The repo and my personal Mac have drifted in both directions, and `worksetup.sh`
 
 **Why atom-dark was cloned and copied by hand.** On a fresh machine, `vim +PluginInstall +qall` loads `.vimrc` before any plugin exists. Line 60, `colorscheme atom-dark-256`, then fails with `E185: Cannot find color scheme 'atom-dark-256'`, and vim exits with status 1. Copying the file into `~/.vim/colors` first hid the error. Reproduced on 2026-09-25 with a throwaway `HOME`. With `silent! colorscheme atom-dark-256`, the headless install exits 0, installs all six plugins, and the next start loads `atom-dark-256` from the plugin. `.vimrc` already loads the colour scheme after `call vundle#end()`, so no reordering is needed.
 
-**The machines.** Four machines take part in the rollout. Two are in use and have drifted, and two are fresh installs with nothing on them. The fresh ones are where the installer is first run for real (see Execution phases).
+**The machines.** Five machines take part in the rollout. Two are in use and have drifted, and two are fresh installs with nothing on them. The fresh ones are where the installer is first run for real (see Execution phases).
 
-| | Personal Mac | Office Mac | Server A | Server B |
-| --- | --- | --- | --- | --- |
-| State | in use, drifted (audited above) | fresh install | in use, drifted | fresh install |
-| OS | macOS 14.8.3, arm64 | macOS 26.4 | Ubuntu 22.04.5 LTS (6.8 HWE kernel), x86_64 | Ubuntu 26.04 LTS (7.0 kernel), x86_64 |
-| Shell | zsh; bash 3.2.57 for scripts | zsh; bash 3.2 for scripts | bash 5.1.16 | bash 5.3.9 |
-| Profile | personal | office | personal | personal (base until the private layer exists) |
-| conda | Anaconda, installed twice | not reported | Miniconda (`~/miniconda3`), active (`base` in the prompt) | none |
-| sudo | admin user | admin user | asks for a password | asks for a password |
-| Managed (MDM) | no | yes: DEP, user approved | n/a | n/a |
-| Homebrew | 6.0.18, owned by me | 7.0.4, owned by me | n/a | n/a |
-| Surveyed | 2026-09-25 | 2026-09-25 (summary) | 2026-09-25 | 2026-09-25 |
-| Claude access | yes | no | no | no |
+| | Personal Mac | Office Mac | Server A | Server B | Office container |
+| --- | --- | --- | --- | --- | --- |
+| State | in use, drifted (audited above) | fresh install | in use, drifted | fresh install | in use, set up by hand |
+| OS | macOS 14.8.3, arm64 | macOS 26.4 | Ubuntu 22.04.5 LTS (6.8 HWE kernel), x86_64 | Ubuntu 26.04 LTS (7.0 kernel), x86_64 | CentOS Linux 7 userland on an EL8 kernel (4.18), x86_64 |
+| Shell | zsh; bash 3.2.57 for scripts | zsh; bash 3.2 for scripts | bash 5.1.16 | bash 5.3.9 | bash 4.2.46 |
+| Profile | personal | office | personal | personal (base until the private layer exists) | office |
+| conda | Anaconda, installed twice | not reported | Miniconda (`~/miniconda3`), active (`base` in the prompt) | none | none |
+| sudo | admin user | admin user | asks for a password | asks for a password | **none** |
+| Managed (MDM) | no | yes: DEP, user approved | n/a | n/a | n/a (employer's container) |
+| Homebrew | 6.0.18, owned by me | 7.0.4, owned by me | n/a | n/a | n/a |
+| Surveyed | 2026-09-25 | 2026-09-25 (summary) | 2026-09-25 | 2026-09-25 | 2026-09-28 (summary) |
+| Claude access | yes | no | no | no | no |
 
 **Server B survey (fresh 26.04).** git, vim, tmux, curl, wget, jq and htop come preinstalled, and so does Docker. `.bashrc` and `.profile` are the Ubuntu defaults. There is no `.gitconfig`, no SSH key, no vim or tmux setup, and no zsh. HTTPS to GitHub works. Every base tool has an apt package except taskopen and taskwarrior-tui. glow (2.1.1) is in Ubuntu's own apt, and Taskwarrior is still 2.6 (2.6.2).
 
 **Server A survey (in use, 22.04).** Everything from the old setup is present: Vundle with its five plugins, TPM, Dracula, glow (2.1.1, with the charm.sh apt repo already configured), Taskwarrior 2.6.1, Timewarrior 1.4.3, mosh and tree. taskopen is installed outside apt, and taskwarrior-tui through `cargo`. fzf, ripgrep, jq and bat are missing. `.vimrc` has the same line count as the repo's, so it is probably the old copy. `.tmux.conf` and `.taskrc` (46 lines, customised) have drifted. `.bash_aliases` has 63 lines. There are four crontab entries, none mentioning conda directly. Two `includeIf` identities are set up, but the SSH key file names do not follow the `<account>_key` convention. Docker is installed (snap). apt versions are older than on 26.04: gh 2.4.0, fzf 0.29, vim 8.2, tmux 3.2a.
 
 **Server A's phase 2 report.** `~/.vimrc` differs from `vim/vimrc` only by the `silent! colorscheme` fix, so it is the old repo copy (keep repo). `~/.tmux.conf` has the same settings plus two commented-out lines, a `@dracula-show-flags` toggle and an alternative `@dracula-plugins` list (keep repo, or carry the comments over). `task_timew.sh` is identical. Missing: fzf, ripgrep, jq, bat and shellcheck. A real run would make 10 changes and ask 2 questions.
+
+**Office container (added 2026-09-28).** A Linux container at work: CentOS Linux 7 userland, no sudo, and old tools: git 1.8.3.1, vim 7.4 (`+python`, `-python3`), tmux 3.1c, bash 4.2.46. git, vim, tmux, curl, wget, jq, tree, mosh, zsh and python3 are installed. `~/.bashrc` (46 lines) already loads `~/.bash_aliases` (16 lines, set up by hand). `~/.gitconfig` has 3 lines with the work identity. `~/.vimrc` and `~/.tmux.conf` were copied by hand. What it changed in the design: the package decision (no sudo means use what is installed), a generic Linux platform, no `git -C` anywhere, and version guards in `vim/vimrc`.
 
 **Office Mac survey (fresh, company-managed).** macOS 26.4, enrolled in the employer's MDM (DEP, user approved). I am an admin, Homebrew 7.0.4 is installed and owned by me, and the standalone Command Line Tools provide git. iTerm2 is installed; whether by hand or through Homebrew was not recorded, and the design handles both. So the installer can run there technically. Whether the employer allows Homebrew and these tools is a policy question, not a technical one (see Open questions).
 
@@ -342,6 +344,8 @@ On personal machines, the git identity follows the folder. Each GitHub account g
 - **SSH keys are never created, copied or moved** (a non-goal). When a key is missing, `--check` reports it and prints the exact command to create one, for example `ssh-keygen -t ed25519 -f ~/.ssh/<account>_key -C "<account>@<machine>"`, plus a reminder to add the public key to GitHub with a title naming the machine.
 - **It runs for the `personal` profile only.** On a new personal laptop, the list arrives with the private layer, so nothing is copied by hand.
 
+**Old git.** CentOS 7 ships git 1.8.3, which has no `git -C <dir>` (added in 1.8.5). The installer, tests and survey run git inside a folder with `(cd <dir> && git ...)` instead, through a `git_in` helper. `core.hooksPath` needs git 2.9, so on older git the hook is reported as unsupported and not turned on. The tests run every mode against a fake git 1.8.3 that rejects `-C`.
+
 **Two fixes to the current setup**
 
 1. **Add `-o IdentitiesOnly=yes`:** `core.sshCommand = "ssh -i ~/.ssh/<account>_key -o IdentitiesOnly=yes"`. Without it, ssh first offers every key loaded in `ssh-agent`. GitHub picks the account from the first key it accepts, so a push can authenticate as the wrong account. Identity files the installer creates include this, and `--check` warns when an existing one lacks it.
@@ -395,6 +399,7 @@ Homebrew on macOS and apt on Ubuntu/Debian, driven by plain-text package lists t
 5. **Links and stubs:** `link` and `stub` lines from `links.txt`.
    Homebrew installs run with `HOMEBREW_NO_ENV_HINTS=1` and `HOMEBREW_NO_EMOJI=1`, which drops hint paragraphs and emoji that arrived garbled when output was pasted.
    apt never stops to ask: every apt-get call runs with `DEBIAN_FRONTEND=noninteractive` (package questions take their defaults), `NEEDRESTART_MODE=l` (needrestart lists services that need a restart instead of asking or restarting them) and `--force-confdef --force-confold` (a config file I changed is kept on upgrade). Found on server B, where needrestart's full-screen dialog took over the first real run.
+   On vim, some plugins need a newer vim: ALE needs Vim 8, and jedi-vim a vim built with Python 3. `vim/vimrc` declares them inside `if v:version >= 800` and `if has('python3')`, so on vim 7.4 they are neither installed nor loaded, and vim starts without errors. Which plugins a machine should have is therefore asked of vim itself (`g:vundle#bundles`), falling back to reading every `Plugin` line until Vundle is cloned.
 6. **Plugins:** `vim +PluginInstall +qall` (run headless with `vim -E -s`) and TPM's `bin/install_plugins`, so no manual `prefix + I` is needed. TPM needs a tmux server, so the installer starts a private one on its own socket (`tmux -L dotfiles-install-<pid>`), points TPM at it, and stops it afterwards. Any tmux session already running is never touched. This needs step 5, because both tools read their config file to know what to install.
 7. **Late links:** `link:late` lines, which point into folders the plugins just created. A late link never creates folders: if the plugin's folder is missing, because the plugin failed to install, it warns and skips, since creating the folder would make the plugin manager think the plugin is installed.
 8. **Private layer and git identities** (personal profile only): clone or check the private layer, then write the identity block from its list.
@@ -441,6 +446,24 @@ taskopen           taskopen         -               # not in Ubuntu apt (22.04, 
 
 Every list is parsed with plain `while read` loops, without associative arrays, so it works in bash 3.2.
 
+## Package installs and sudo
+
+Installing packages needs root on Linux, and not every machine allows it (the office container has no sudo). So each run first decides whether it installs missing packages at all. If not, it uses the tools already installed, and everything that lives in the home folder still happens: links, stubs, add-on clones, plugins.
+
+| Situation | Decision |
+| --- | --- |
+| `--packages` or `--no-packages` given | as given, and remembered |
+| generic Linux (no supported package manager) | no |
+| answer saved in `~/.config/dotfiles/packages` | as saved |
+| macOS | yes: Homebrew installs as the user, without sudo |
+| no `sudo` command | no |
+| `sudo -n true` works (no password needed right now) | yes |
+| read-only mode | shown as "to be asked" |
+| real run with `--yes`, or no terminal | no; add `--packages` to install |
+| real run in a terminal | asked once: "Can this run use sudo to install packages?"; the answer is saved at the end of the run |
+
+With "no", step 2 says so and step 3 shows missing tools as `skip (not installed; package installs are off here)`, never as failures. Plugins for a missing vim or tmux are skipped with a warning. Downloading standalone binaries into `~/.local/bin` is out of scope for now: it raises policy questions on employer machines, and adds versions and checksums to manage.
+
 ## Platform layer
 
 `install.sh` is a thin wrapper: it detects the platform, sources exactly one platform file, then runs the shared steps in `lib/common.sh`. Only what really differs between operating systems lives in the platform files. Everything else is written once, so a fix cannot land on one OS and miss another.
@@ -451,8 +474,9 @@ Every list is parsed with plain `while read` loops, without associative arrays, 
 
 1. `uname -s` = `Darwin` means `macos`.
 2. `uname -s` = `Linux` means reading `/etc/os-release`: `ID` or `ID_LIKE` containing `debian` or `ubuntu` means `debian`; `fedora` or `rhel` means `fedora` once that file exists.
-3. Anything else stops with the detected values and a clear message, before any change is made.
-4. `--platform <name>` overrides detection, for testing and for unusual distros.
+3. Any other Linux (`ID` not Debian or Ubuntu: CentOS, RHEL, Alpine, ...) is `linux`, the generic platform: no package manager support, so packages are never installed there and the tools already on PATH are used. Its `pkg_installed` checks command names from `map.txt`'s command column (`task`, `timew`, `rg`, `bat|batcat`).
+4. Anything that is neither macOS nor Linux stops with the detected values and a clear message, before any change is made.
+5. `--platform macos|debian|linux` overrides detection, for testing and for unusual distros.
 
 **The platform functions.** Every platform file defines exactly these functions and nothing else. `common.sh` calls them and never calls `brew`, `apt`, `sed -i`, `stat` or `readlink` directly.
 
@@ -481,6 +505,7 @@ One script with a mode for each job. The two read-only modes are the default way
 | `--dry-run` | No | Prints every action a real run would take, in order. |
 | `--report` | No | Prints one redacted, pasteable block: platform, versions, `--check` results and the latest failure. See Verbose output and error reports. |
 | (none) | Yes | Full install, following the Run order. Asks before each file that differs, unless `--yes` is given. |
+| `--packages`, `--no-packages` | option | Whether this machine installs missing packages. Remembered in `~/.config/dotfiles/packages`. See Package installs and sudo. |
 | `--link-only` | Yes | Links and stubs only, no packages. For machines where I cannot install software. |
 | `--adopt <path> [--as <repo path>]` | Yes | Moves a live file into the repo, links it and adds it to `links.txt`. See Declared lists and --adopt. |
 | `--update-addons` | Yes | `git pull --ff-only` on every add-on in `addons.txt` whose remote matches. |
@@ -627,6 +652,7 @@ Work happens on a branch, `redesign`, which is pushed but only merged into `mast
 | 1 | 2026-09-26 | repo content, pre-commit hook |
 | 2 | 2026-09-26 | read-only installer; `--check` on all four machines; shellcheck clean |
 | 3 | 2026-09-27 | write path. Real runs, re-runs and restore on server B (26.04) and the office Mac (macOS 26.4); deliberate failure on server B; tests pass under bash 3.2 and 5.3. Fixed along the way: needrestart's dialog, `~` on bash 5, tests that could prompt |
+| 3+ | 2026-09-28 | office container support: package decision, generic Linux platform, old git and vim. Tested here; a real run in the container is next |
 | 4 | next | link the personal Mac |
 
 **Rules during execution**
@@ -714,6 +740,9 @@ The decisions below are settled. The open questions need an answer before the ph
 | taskwarrior-tui, taskopen, gh on Linux | skipped (apt `-` in `map.txt`) | taskwarrior-tui and taskopen are not in Ubuntu apt; gh from apt is 2.4.0 on 22.04, too old, and not needed on the servers for now |
 | Office Mac policy | basic open-source CLI tools and Homebrew assumed allowed; the `--link-only` fallback stays in the design | generic tools, installed under my own admin account |
 | Rollout order | public part first, proven by real runs on the fresh office Mac and server B; the personal Mac and server A stay read-only until then; server A last | bugs surface where nothing can break |
+| Machines without sudo | decide per machine whether packages are installed; if not, use what is installed; `--packages`/`--no-packages`, remembered | the office container has no sudo |
+| Other Linux distros | generic `linux` platform: no package manager, tools found by command name | the office container is CentOS 7 |
+| Old tools | no `git -C`; hook needs git 2.9; vim plugins that need Vim 8 or Python 3 are guarded | git 1.8.3 and vim 7.4 in the container |
 | Install order | nine-step run order; config linked before plugin installs, files inside plugin folders linked after | plugins read their config to know what to install |
 | What the installer manages | declared in `links.txt` and `addons.txt`; `--adopt` adds files | adding a file or add-on is one line, not a code change |
 | OS differences | thin `install.sh` wrapper + shared `lib/common.sh` + one small platform file per OS | per-OS scripts would duplicate shared logic and still need bash 3.2 on Mac |

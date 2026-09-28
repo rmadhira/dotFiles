@@ -19,6 +19,7 @@ Until the phase that replaces them, the old files stay as they are: `worksetup.s
 - **Never push without an explicit instruction.** No `git push`, remote branches, tags, PRs or other changes on GitHub unless the user asks for it in that message. Commit locally and say it is ready to push. If a requested push fails on credentials, stop and report it; never try other keys, tokens or credential helpers.
 - **Public repo, no PII.** No names, emails, home paths (`/Users/<name>`, `/home/<name>`), hostnames, private IPs or personal aliases in any committed file, including docs. Personal data belongs in the separate private repo (`dotFiles-private`, cloned to `~/.config/dotfiles/private/`). Work data belongs in neither repo.
 - **bash 3.2 compatible.** Scripts must run under macOS's `/bin/bash` 3.2: no associative arrays, `${var,,}`, `mapfile` or `readarray`. Commands whose flags differ between BSD and GNU (`sed -i`, `stat`, `readlink -f`) go through the platform functions in the design.
+- **Old tools exist.** The office container has git 1.8.3, vim 7.4 and bash 4.2: never use `git -C` (use `git_in <dir> …`), treat `core.hooksPath` as git 2.9+, and guard vim plugins that need Vim 8 or Python 3 in `vim/vimrc`.
 - **Zero dependencies.** Plain bash and git only. The user chose this over chezmoi, stow and yadm; do not propose switching.
 - **Never destroy.** Anything replaced in `$HOME` is backed up first, and every action must be undoable.
 
